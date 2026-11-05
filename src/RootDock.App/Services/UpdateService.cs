@@ -33,7 +33,9 @@ public sealed class UpdateService
     public const string RepositoryUrl = "https://github.com/developedbyfabio/RootDock";
     public const string ReleasesUrl = RepositoryUrl + "/releases";
 
-    private static readonly TimeSpan FirstCheckDelay = TimeSpan.FromSeconds(20);
+    // Logo depois de abrir (a consulta e o download rodam fora da thread da interface): a versão
+    // nova costuma estar baixada em poucos segundos, e o RootDock pergunta se atualiza.
+    private static readonly TimeSpan FirstCheckDelay = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(6);
 
     private readonly UpdateManager? _manager;

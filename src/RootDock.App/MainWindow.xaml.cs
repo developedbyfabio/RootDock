@@ -194,6 +194,8 @@ public partial class MainWindow : FluentWindow
                 Notify($"Sessão \"{name}\" não encontrada.", true);
             }
         }
+
+        StartupSettled();
     }
 
     private void LoadSessions()

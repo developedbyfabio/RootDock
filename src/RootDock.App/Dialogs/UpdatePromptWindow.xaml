@@ -1,0 +1,44 @@
+<ui:FluentWindow x:Class="RootDock.App.Dialogs.UpdatePromptWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="Atualização disponível"
+                 Width="520" SizeToContent="Height" ResizeMode="NoResize"
+                 WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="None"
+                 ShowInTaskbar="False"
+                 Background="{DynamicResource RdSurface}">
+    <StackPanel>
+        <ui:TitleBar Title="Atualização do RootDock" ShowMinimize="False" ShowMaximize="False" />
+        <StackPanel Margin="24,2,24,20">
+            <DockPanel>
+                <Image Source="pack://application:,,,/Assets/rootdock-64.png" Width="48" Height="48" Margin="0,0,16,0" VerticalAlignment="Top" />
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="TitleText" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock x:Name="DetailText" Foreground="{DynamicResource RdTextDim}" TextWrapping="Wrap" Margin="0,4,0,0" LineHeight="19" />
+                </StackPanel>
+            </DockPanel>
+
+            <Border x:Name="NotesPanel" Margin="0,18,0,0" Padding="14,10" Visibility="Collapsed"
+                    Background="{DynamicResource RdPanel}" BorderBrush="{DynamicResource RdBorder}" BorderThickness="1" CornerRadius="8">
+                <StackPanel>
+                    <TextBlock Text="Novidades" FontWeight="SemiBold" Margin="0,0,0,6" />
+                    <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
+                        <TextBlock x:Name="NotesText" TextWrapping="Wrap" LineHeight="20" Foreground="{DynamicResource RdText}" />
+                    </ScrollViewer>
+                </StackPanel>
+            </Border>
+
+            <TextBlock x:Name="HintText" Margin="0,14,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource RdTextDim}" />
+
+            <DockPanel Margin="0,20,0,0" LastChildFill="False">
+                <!-- "Depois" é o padrão do Enter: tecla que ia para o terminal não reinicia o programa sem querer -->
+                <ui:Button x:Name="LaterButton" DockPanel.Dock="Right" Content="Depois" IsCancel="True" IsDefault="True"
+                           Click="OnLater" MinWidth="96" Margin="8,0,0,0" />
+                <ui:Button x:Name="UpdateButton" DockPanel.Dock="Right" Content="Atualizar agora" Appearance="Primary"
+                           Icon="{ui:SymbolIcon ArrowClockwise20}" Click="OnUpdate" />
+            </DockPanel>
+        </StackPanel>
+    </StackPanel>
+</ui:FluentWindow>

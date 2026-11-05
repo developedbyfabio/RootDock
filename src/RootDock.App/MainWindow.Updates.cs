@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Threading;
 using RootDock.App.Dialogs;
 using RootDock.App.Services;
 
@@ -21,9 +22,51 @@ public partial class MainWindow
 
         updates.SetAutomatic(_settings.AutoUpdate);
         updates.Changed += (_, _) => RefreshUpdatePill();
-        updates.Ready += (_, _) =>
-            Notify($"A versão {updates.AvailableVersion} do RootDock foi baixada. Ela é instalada ao fechar, ou clique em \"Reiniciar para atualizar\".", false);
+        updates.Ready += (_, _) => PromptUpdate();
         RefreshUpdatePill();
+    }
+
+    private bool _startupSettled;
+    private string? _promptedVersion;
+    private DispatcherTimer? _promptRetry;
+
+    /// <summary>Fim da abertura (página pronta, importação e avisos): já dá para perguntar sobre atualização.</summary>
+    private void StartupSettled()
+    {
+        _startupSettled = true;
+        PromptUpdate(); // versão baixada antes (ou durante a abertura)
+    }
+
+    /// <summary>
+    /// Versão nova baixada: pergunta se atualiza agora (uma vez por versão). Espera a janela estar
+    /// livre: abertura concluída, janela ativa e sem outro diálogo na frente.
+    /// </summary>
+    private void PromptUpdate()
+    {
+        if (Updates is not { Stage: UpdateStage.Ready, AvailableVersion: { } version } updates
+            || !updates.Automatic || updates.RestartRequested || _promptedVersion == version)
+        {
+            _promptRetry?.Stop();
+            return;
+        }
+
+        if (!_startupSettled || !IsActive || WindowState == WindowState.Minimized || OwnedWindows.Count > 0)
+        {
+            _promptRetry ??= new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Background, (_, _) => PromptUpdate(), Dispatcher);
+            _promptRetry.Start();
+            return;
+        }
+
+        _promptRetry?.Stop();
+        _promptedVersion = version;
+        if (UpdatePromptWindow.Ask(this, updates, _workspace.OpenCount))
+        {
+            RestartForUpdate();
+        }
+        else
+        {
+            Notify($"Ok. A versão {version} será instalada quando você fechar o RootDock (ou clique em \"Reiniciar para atualizar\").", false);
+        }
     }
 
     /// <summary>
@@ -78,6 +121,11 @@ public partial class MainWindow
             _settings.AutoUpdate = enabled;
             SaveSettings();
         }, RestartForUpdate, checkNow);
+
+        if (updates is { Stage: UpdateStage.Ready, AvailableVersion: { } seen })
+        {
+            _promptedVersion = seen; // acabou de ver a versão (e escolheu não reiniciar): não pergunta de novo
+        }
     }
 
     /// <summary>Fecha o RootDock (com a confirmação de sempre se houver conexões) e abre de novo já atualizado.</summary>

@@ -27,10 +27,10 @@ Clique em **Mais informações → Executar assim mesmo**.
 
 Depois de instalado, o RootDock se atualiza sozinho pelas Releases deste repositório (Velopack):
 
-- procura uma versão nova 20 s depois de abrir e a cada 6 horas;
-- baixa em segundo plano só o que mudou (pacote de diferença, normalmente poucos MB);
-- mostra **Reiniciar para atualizar** na barra de título e um aviso na barra de status;
-- instala ao fechar o RootDock, ou na hora com **Reiniciar e atualizar** (pede confirmação se houver conexões abertas).
+- procura uma versão nova logo ao abrir (3 s) e a cada 6 horas;
+- baixa em segundo plano só o que mudou (pacote de diferença, normalmente menos de 1 MB);
+- terminado o download, **pergunta se quer atualizar agora**, com as novidades da versão. "Atualizar agora" fecha e abre de novo já atualizado (avisa antes se houver abas abertas); "Depois" deixa o aviso **Reiniciar para atualizar** na barra de título e instala quando o RootDock for fechado;
+- o Enter escolhe "Depois", para uma tecla que ia para o terminal não reiniciar o programa sem querer.
 
 **Ajuda → Verificar atualizações** mostra a situação, as novidades da versão e liga/desliga o modo automático.
 Cópias executadas pelo Visual Studio ou por `dotnet run` não se atualizam (a janela explica isso).

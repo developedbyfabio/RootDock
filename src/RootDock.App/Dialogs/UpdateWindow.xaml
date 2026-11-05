@@ -69,7 +69,7 @@
             <CheckBox x:Name="AutoBox" Margin="0,16,0,0" Content="Baixar e instalar atualizações automaticamente"
                       Checked="OnAutoChanged" Unchecked="OnAutoChanged" />
             <TextBlock x:Name="AutoHint" Margin="28,2,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource RdTextDim}"
-                       Text="O RootDock procura versões novas ao abrir e a cada 6 horas e baixa em segundo plano. A instalação acontece quando você fecha o programa; nenhuma conexão é interrompida." />
+                       Text="O RootDock procura versões novas ao abrir e a cada 6 horas e baixa em segundo plano. Quando uma termina de baixar, ele pergunta se quer atualizar agora; se escolher depois, ela é instalada quando você fecha o programa." />
 
             <DockPanel Margin="0,22,0,0" LastChildFill="False">
                 <ui:Button x:Name="CheckButton" Content="Verificar agora" Icon="{ui:SymbolIcon ArrowSync20}" Click="OnCheck" />
