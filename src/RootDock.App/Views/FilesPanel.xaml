@@ -149,6 +149,9 @@
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                          KeyDown="OnListKeyDown"
                          PreviewMouseRightButtonDown="OnListRightClick"
+                         PreviewMouseLeftButtonDown="OnListMouseDown"
+                         PreviewMouseMove="OnListMouseMove"
+                         PreviewMouseLeftButtonUp="OnListMouseUp"
                          DragOver="OnDragOver"
                          Drop="OnDrop">
                     <ListBox.ItemContainerStyle>

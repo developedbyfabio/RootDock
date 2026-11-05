@@ -517,6 +517,111 @@ public partial class FilesPanel : UserControl
         return $"{Triplet(1)}{Triplet(4)}{Triplet(7)}";
     }
 
+    // ------------------------------------------------------------------ arrastar para o Windows
+
+    private Point _dragStart;
+    private RemoteEntryViewModel? _dragItem;
+    private bool _deferSelect;
+
+    private void OnListMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        _dragItem = ItemUnder(e.OriginalSource);
+        _dragStart = e.GetPosition(List);
+        _deferSelect = false;
+        if (_dragItem is not null && e.ClickCount == 1 && Keyboard.Modifiers == ModifierKeys.None &&
+            List.SelectedItems.Count > 1 && List.SelectedItems.Contains(_dragItem))
+        {
+            // Como no Explorer: clicar num item de uma seleção múltipla não desfaz a seleção na
+            // hora (pode ser o começo de um arrastar); sem arrastar, seleciona só ele ao soltar.
+            _deferSelect = true;
+            List.Focus();
+            e.Handled = true;
+        }
+    }
+
+    private void OnListMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_deferSelect && _dragItem is { } item)
+        {
+            List.SelectedItems.Clear();
+            List.SelectedItem = item;
+            (List.ItemContainerGenerator.ContainerFromItem(item) as ListBoxItem)?.Focus();
+        }
+
+        _deferSelect = false;
+        _dragItem = null;
+    }
+
+    private void OnListMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || _dragItem is not { } item)
+        {
+            return;
+        }
+
+        var delta = e.GetPosition(List) - _dragStart;
+        if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        _dragItem = null;
+        _deferSelect = false;
+        if (!List.SelectedItems.Contains(item))
+        {
+            List.SelectedItems.Clear();
+            List.SelectedItem = item;
+        }
+
+        DragToWindows(Selected);
+    }
+
+    /// <summary>
+    /// Arrasta para o Explorer (ou a área de trabalho): o Windows escolhe a pasta, pergunta se
+    /// substitui e mostra o progresso; o conteúdo vem do servidor enquanto é gravado.
+    /// </summary>
+    private void DragToWindows(IReadOnlyList<RemoteEntryViewModel> items)
+    {
+        if (Vm is not { IsReady: true } vm || items.Count == 0 || vm.DragListFor([.. items.Select(i => i.Entry)]) is not { } load)
+        {
+            return;
+        }
+
+        var dispatcher = Dispatcher;
+        var data = new RootDock.Core.Shell.VirtualFileDataObject(load);
+        data.Finished += result => dispatcher.BeginInvoke(() => ReportDrag(vm, result));
+        var label = items.Count == 1 ? items[0].Name : $"{items.Count} itens";
+        var image = ShellDragImage.Create(items[0].IconImage, label, this);
+        Mouse.Capture(null); // o arrastar do Windows assume o mouse
+        try
+        {
+            RootDock.Core.Shell.ShellDrag.DoDragDrop(data, image);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Arrastar para o Windows", ex);
+            vm.Notify($"Não foi possível arrastar: {ex.Message}", true);
+        }
+    }
+
+    private static void ReportDrag(RemoteFilesViewModel vm, RootDock.Core.Shell.VirtualFileDropResult result)
+    {
+        if (result.Error is { } error)
+        {
+            Log.Info($"Arrastar para o Windows: {error}");
+            vm.Notify($"Cópia para o Windows com erro: {error}", true);
+        }
+        else if (result.Warning is { } warning)
+        {
+            vm.Notify($"Copiado para o Windows, mas {warning}.", true);
+        }
+        else if (result.Dropped && result.FilesCompleted > 0)
+        {
+            var files = result.FilesCompleted == 1 ? "1 arquivo copiado" : $"{result.FilesCompleted} arquivos copiados";
+            vm.Notify($"{files} para o Windows ({Format.Bytes(result.Bytes)}).", false);
+        }
+    }
+
     // ------------------------------------------------------------------ arrastar do Windows
 
     private void OnDragOver(object sender, DragEventArgs e)

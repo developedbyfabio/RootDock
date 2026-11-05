@@ -141,6 +141,29 @@ public sealed class RemoteFileSystem : IFileTransport
             }
         });
 
+    /// <summary>Atributos do destino (segue links): pasta, tamanho e data. Null se não existe.</summary>
+    public Task<(bool IsDirectory, long Size, DateTime Modified)?> StatAsync(string path, CancellationToken ct) =>
+        RunAsync<(bool, long, DateTime)?>(ct, async token =>
+        {
+            try
+            {
+                var a = await _client.GetAttributesAsync(path, token).ConfigureAwait(false);
+                return (a.IsDirectory, a.Size, a.LastWriteTime);
+            }
+            catch (SftpPathNotFoundException)
+            {
+                return null;
+            }
+        });
+
+    /// <summary>Escreve o conteúdo do arquivo em <paramref name="output"/> (leitura em paralelo do SSH.NET).</summary>
+    public Task CopyToAsync(string remotePath, Stream output, CancellationToken ct) =>
+        RunAsync(ct, async token =>
+        {
+            await _client.DownloadFileAsync(remotePath, output, token).ConfigureAwait(false);
+            return true;
+        });
+
     /// <summary>
     /// Baixa para "nome.rootdock-part" e renomeia no fim. Com <paramref name="keepPartial"/>
     /// verdadeiro no cancelamento (pausa), o parcial fica; com <paramref name="resume"/> (retomada

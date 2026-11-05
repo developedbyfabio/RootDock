@@ -159,6 +159,23 @@ public sealed partial class RemoteFilesViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// Montagem da lista para arrastar estes itens para o Explorer (pastas são percorridas no
+    /// servidor, já em segundo plano). Null se o SFTP não está aberto agora.
+    /// </summary>
+    public Func<CancellationToken, Task<RootDock.Core.Shell.VirtualFileList>>? DragListFor(IReadOnlyList<RemoteEntry> entries)
+    {
+        if (_fs is not { IsConnected: true } fs || entries.Count == 0)
+        {
+            return null;
+        }
+
+        return ct => RemoteDragList.BuildAsync(fs, entries, ct);
+    }
+
+    /// <summary>Aviso na barra de status (thread da interface).</summary>
+    public void Notify(string text, bool isError) => Notice?.Invoke(text, isError);
+
     /// <summary>SFTP conectado (reabre se caiu). Usado também pela edição remota.</summary>
     public async Task<RemoteFileSystem> GetFileSystemAsync()
     {

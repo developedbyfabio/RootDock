@@ -173,8 +173,6 @@ public partial class MainWindow
         yield return Command("Histórico de comandos...", OpenHistory, "Ctrl+Shift+H");
         yield return Command("Gravações de terminal...", () => RecordingsWindow.ShowFor(this, _workspace.RecordingsDirectory!, _workspace));
         yield return new Separator();
-        yield return Command("Aparência do terminal...", OpenTerminalSettings);
-        yield return new Separator();
         yield return Command("Abrir a pasta de dados do RootDock", () => OpenFolder(_paths.DataDirectory));
     }
 
