@@ -11,7 +11,7 @@ using RootDock.Core.History;
 using RootDock.Core.Sftp;
 using Wpf.Ui.Controls;
 using MenuItem = System.Windows.Controls.MenuItem;
-using MessageBox = Wpf.Ui.Controls.MessageBox;
+using MessageBox = RootDock.App.Services.AppMessageBox;
 using MessageBoxResult = Wpf.Ui.Controls.MessageBoxResult;
 
 namespace RootDock.App.Dialogs;

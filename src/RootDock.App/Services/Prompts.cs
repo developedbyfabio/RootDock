@@ -1,7 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using Wpf.Ui.Controls;
-using MessageBox = Wpf.Ui.Controls.MessageBox;
+using MessageBox = RootDock.App.Services.AppMessageBox;
 using MessageBoxResult = Wpf.Ui.Controls.MessageBoxResult;
 using TextBlock = System.Windows.Controls.TextBlock;
 using TextBox = Wpf.Ui.Controls.TextBox;

@@ -20,7 +20,7 @@ using RootDock.Core.Security;
 using RootDock.Core.Sessions;
 using RootDock.Core.Settings;
 using Wpf.Ui.Controls;
-using MessageBox = Wpf.Ui.Controls.MessageBox;
+using MessageBox = RootDock.App.Services.AppMessageBox;
 using TreeViewItem = System.Windows.Controls.TreeViewItem;
 using MessageBoxResult = Wpf.Ui.Controls.MessageBoxResult;
 

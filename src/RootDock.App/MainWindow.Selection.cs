@@ -6,7 +6,7 @@ using RootDock.App.Services;
 using RootDock.App.ViewModels;
 using RootDock.Core.Security;
 using RootDock.Core.Sessions;
-using MessageBox = Wpf.Ui.Controls.MessageBox;
+using MessageBox = RootDock.App.Services.AppMessageBox;
 using MessageBoxResult = Wpf.Ui.Controls.MessageBoxResult;
 
 namespace RootDock.App;
