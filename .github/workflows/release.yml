@@ -1,6 +1,7 @@
 # Publica uma versão do RootDock a cada tag vX.Y.Z:
 #   git tag v0.2.0 && git push origin v0.2.0
-# Gera o instalador (RootDock-win-Setup.exe), a versão portátil e os pacotes de atualização
+# Gera o instalador com assistente (RootDock-win.msi), o de um clique (RootDock-win-Setup.exe), a
+# versão portátil e os pacotes de atualização
 # (completo + diferença em relação à versão anterior) e cria a Release no GitHub. Os RootDock
 # instalados encontram a versão nova sozinhos (Velopack) e se atualizam ao fechar.
 name: Release
@@ -56,6 +57,8 @@ jobs:
         shell: pwsh
         run: |
           $tag = '${{ github.ref_name }}'
+          # O checkout traz a tag sem a mensagem (vira tag "leve"): busca o objeto da tag de verdade.
+          git fetch --force --quiet origin "refs/tags/$($tag):refs/tags/$($tag)"
           # Tag anotada (git tag -a v0.2.0 -m "...") vira o texto das novidades; senão, os commits desde a versão anterior.
           $notes = ''
           if ((git cat-file -t $tag) -eq 'tag') {
@@ -85,7 +88,11 @@ jobs:
           vpk pack -r win-x64 --packId RootDock --packVersion ${{ steps.version.outputs.value }}
           --packDir publish --mainExe RootDock.exe --packTitle RootDock
           --packAuthors "Fabio Henrique de Almeida Lemes"
-          --icon src/RootDock.App/Assets/rootdock.ico --releaseNotes notes.md -o releases
+          --icon src/RootDock.App/Assets/rootdock.ico --releaseNotes notes.md
+          --msi --instWelcome installer/boas-vindas.txt --instReadme installer/leia-me.rtf
+          --instConclusion installer/conclusao.txt
+          --msiTopBanner installer/msi-banner.bmp --msiDialogBackground installer/msi-dialog.bmp
+          -o releases
 
       - name: Criar a Release no GitHub
         shell: pwsh

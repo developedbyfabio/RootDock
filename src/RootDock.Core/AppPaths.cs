@@ -27,8 +27,16 @@ public sealed class AppPaths
     /// --data, vai junto da pasta de dados para cada instância portátil ter o seu navegador.
     /// </summary>
     public string WebViewDirectory => ReferenceEquals(this, Default)
-        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RootDock", "WebView2")
+        ? DefaultWebViewDirectory
         : Path.Combine(DataDirectory, "WebView2");
+
+    /// <summary>
+    /// Pasta própria, fora de %LOCALAPPDATA%\RootDock: aquela é a pasta da instalação e, se existisse
+    /// antes (cópia rodada pelo Visual Studio ou portátil), o instalador achava que o RootDock já
+    /// estava instalado. É apagada ao desinstalar (Program.cs).
+    /// </summary>
+    public static string DefaultWebViewDirectory { get; } =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RootDock.WebView2");
 
     public void EnsureCreated() => Directory.CreateDirectory(DataDirectory);
 }

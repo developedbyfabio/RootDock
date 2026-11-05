@@ -1,0 +1,7 @@
+Este assistente vai instalar o RootDock no seu computador.
+
+O RootDock reúne terminais SSH, Telnet e Serial, Área de Trabalho Remota (RDP), VNC, SFTP, FTP e arquivos de servidores Windows numa janela só.
+
+Depois de instalado, ele se atualiza sozinho quando sair uma versão nova.
+
+Clique em Avançar para continuar.

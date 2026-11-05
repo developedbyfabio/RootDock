@@ -1,4 +1,6 @@
+using System.IO;
 using RootDock.App.Services;
+using RootDock.Core;
 using Velopack;
 
 namespace RootDock.App;
@@ -18,6 +20,7 @@ public static class Program
             VelopackApp.Build()
                 .SetLogger(new UpdateLog())
                 .OnRestarted(version => UpdateService.RestartedVersion = version.ToString())
+                .OnBeforeUninstallFastCallback(_ => RemoveCache())
                 .Run();
         }
         catch (Exception ex)
@@ -29,5 +32,24 @@ public static class Program
         var app = new App();
         app.InitializeComponent();
         app.Run();
+    }
+
+    /// <summary>
+    /// Ao desinstalar: apaga o cache da tela (WebView2), que fica fora da pasta do programa. Sessões,
+    /// preferências (%APPDATA%\RootDock) e senhas (Cofre do Windows) ficam, para uma reinstalação.
+    /// </summary>
+    private static void RemoveCache()
+    {
+        try
+        {
+            if (Directory.Exists(AppPaths.DefaultWebViewDirectory))
+            {
+                Directory.Delete(AppPaths.DefaultWebViewDirectory, recursive: true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Arquivo preso (outra cópia aberta): sobra só cache, sem dado do usuário.
+        }
     }
 }

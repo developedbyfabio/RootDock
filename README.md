@@ -7,9 +7,18 @@ Criado por **Fabio Henrique de Almeida Lemes**.
 
 ## Instalar
 
-Baixe `RootDock-win-Setup.exe` na [página de versões](https://github.com/developedbyfabio/RootDock/releases/latest) e execute.
-Não pede administrador: instala em `%LocalAppData%\RootDock` e cria atalhos na Área de Trabalho e no Menu Iniciar.
-Há também `RootDock-win-Portable.zip` (descompacte e rode `RootDock.exe`; também se atualiza sozinho).
+Baixe o instalador na [página de versões](https://github.com/developedbyfabio/RootDock/releases/latest):
+
+- **`RootDock-win.msi`** (recomendado): assistente de instalação em português, com boas-vindas, informações e a
+  escolha entre instalar só para você ou para todos os usuários (este pede administrador, também nas atualizações).
+- `RootDock-win-Setup.exe`: instalação de um clique, só para você, sem perguntas.
+- `RootDock-win-Portable.zip`: descompacte e rode `RootDock.exe` (também se atualiza sozinho).
+
+Os três criam atalhos na Área de Trabalho e no Menu Iniciar e recebem as atualizações automaticamente.
+Desinstalar (Configurações → Aplicativos) remove o programa e o cache da tela; sessões, preferências
+(`%APPDATA%\RootDock`) e senhas (Cofre do Windows) ficam, para uma reinstalação.
+
+A arte e os textos do assistente ficam em `installer/` (`pwsh installer/gerar-recursos.ps1` gera de novo).
 
 O instalador ainda não é assinado digitalmente: na primeira vez o Windows pode mostrar "O Windows protegeu o computador".
 Clique em **Mais informações → Executar assim mesmo**.

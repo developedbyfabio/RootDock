@@ -1,0 +1,5 @@
+O RootDock foi instalado.
+
+Você encontra o programa no Menu Iniciar e na Área de Trabalho.
+
+As próximas versões chegam sozinhas: quando houver uma nova, o RootDock avisa com "Reiniciar para atualizar".
