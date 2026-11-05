@@ -1,0 +1,12 @@
+# Texto com fim de linha normalizado; binários intactos.
+* text=auto
+
+*.png binary
+*.ico binary
+*.jpg binary
+*.gif binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.exe binary
+*.dll binary

@@ -1,0 +1,100 @@
+# Publica uma versão do RootDock a cada tag vX.Y.Z:
+#   git tag v0.2.0 && git push origin v0.2.0
+# Gera o instalador (RootDock-win-Setup.exe), a versão portátil e os pacotes de atualização
+# (completo + diferença em relação à versão anterior) e cria a Release no GitHub. Os RootDock
+# instalados encontram a versão nova sozinhos (Velopack) e se atualizam ao fechar.
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  VPK_VERSION: 1.2.161
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # histórico e tags para as notas da versão
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Versão da tag
+        id: version
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $version = $tag.TrimStart('v')
+          if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { throw "Tag inválida: $tag (use vX.Y.Z, ex.: v0.2.0)" }
+          "value=$version" >> $env:GITHUB_OUTPUT
+          "prerelease=$($version.Contains('-').ToString().ToLower())" >> $env:GITHUB_OUTPUT
+
+      - name: Testes
+        run: dotnet test --project tests/RootDock.Core.Tests/RootDock.Core.Tests.csproj -c Release
+
+      - name: Publicar (win-x64, com o .NET embutido)
+        run: >
+          dotnet publish src/RootDock.App/RootDock.App.csproj -c Release -r win-x64 --self-contained true
+          -p:Version=${{ steps.version.outputs.value }} -o publish
+
+      - name: Notas da versão
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          # Tag anotada (git tag -a v0.2.0 -m "...") vira o texto das novidades; senão, os commits desde a versão anterior.
+          $notes = ''
+          if ((git cat-file -t $tag) -eq 'tag') {
+            $notes = (git tag -l --format='%(contents:body)' $tag) -join "`n"
+            if (-not $notes.Trim()) { $notes = (git tag -l --format='%(contents:subject)' $tag) -join "`n" }
+          }
+          if (-not $notes.Trim()) {
+            $previous = git describe --tags --abbrev=0 "$tag^" 2>$null
+            $range = if ($LASTEXITCODE -eq 0 -and $previous) { "$previous..$tag" } else { $tag }
+            $notes = (git log $range --no-merges --pretty=format:'- %s' -n 60) -join "`n"
+          }
+          $global:LASTEXITCODE = 0
+          Set-Content -Path notes.md -Value $notes -Encoding utf8
+          Get-Content notes.md
+
+      - name: Instalar o vpk
+        run: dotnet tool install -g vpk --version ${{ env.VPK_VERSION }}
+
+      - name: Baixar a versão anterior (para gerar o pacote de diferença)
+        continue-on-error: true
+        env:
+          VPK_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: vpk download github --repoUrl ${{ github.server_url }}/${{ github.repository }} -o releases
+
+      - name: Empacotar
+        run: >
+          vpk pack -r win-x64 --packId RootDock --packVersion ${{ steps.version.outputs.value }}
+          --packDir publish --mainExe RootDock.exe --packTitle RootDock
+          --packAuthors "Fabio Henrique de Almeida Lemes"
+          --icon src/RootDock.App/Assets/rootdock.ico --releaseNotes notes.md -o releases
+
+      - name: Criar a Release no GitHub
+        shell: pwsh
+        env:
+          VPK_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $vpkArgs = @('upload', 'github', '--repoUrl', '${{ github.server_url }}/${{ github.repository }}',
+                       '-o', 'releases', '--publish', '--merge',
+                       '--releaseName', 'RootDock ${{ steps.version.outputs.value }}', '--tag', '${{ github.ref_name }}')
+          if ('${{ steps.version.outputs.prerelease }}' -eq 'true') { $vpkArgs += '--pre' }
+          vpk @vpkArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

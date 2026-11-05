@@ -1,0 +1,56 @@
+﻿<ui:FluentWindow x:Class="RootDock.App.Dialogs.ShortcutsWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="Atalhos de teclado"
+                 Width="900" Height="680" MinWidth="640" MinHeight="420"
+                 WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="None"
+                 ShowInTaskbar="False"
+                 Background="{DynamicResource RdSurface}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <ui:TitleBar Title="Atalhos de teclado" ShowMinimize="False" ShowMaximize="False" />
+        <ui:TextBox Grid.Row="1" x:Name="FilterBox" Margin="16,0,16,10" PlaceholderText="Filtrar (ex.: dividir, colar, F2)"
+                    Icon="{ui:SymbolIcon Search20}" TextChanged="OnFilter" ClearButtonEnabled="True" />
+        <ScrollViewer Grid.Row="2" Margin="16,0,8,16" VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
+            <ItemsControl x:Name="Groups">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="2" VerticalAlignment="Top" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Margin="0,0,10,10" Padding="14,10" Background="{DynamicResource RdPanel}" BorderBrush="{DynamicResource RdBorder}" BorderThickness="1" CornerRadius="8"
+                                VerticalAlignment="Top">
+                            <StackPanel>
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="{DynamicResource RdAccent}" Margin="0,0,0,6" />
+                                <ItemsControl ItemsSource="{Binding Items}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,3">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="205" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Keys}" FontFamily="Cascadia Mono, Consolas" FontSize="12" Foreground="{DynamicResource RdText}"
+                                                           TextWrapping="Wrap" VerticalAlignment="Top" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Action}" Foreground="{DynamicResource RdTextDim}" TextWrapping="Wrap" FontSize="12.5" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
+</ui:FluentWindow>

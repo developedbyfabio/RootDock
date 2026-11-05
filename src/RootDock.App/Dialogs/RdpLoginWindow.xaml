@@ -1,0 +1,43 @@
+<ui:FluentWindow x:Class="RootDock.App.Dialogs.RdpLoginWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="Área de Trabalho Remota"
+                 Width="480"
+                 SizeToContent="Height"
+                 ResizeMode="NoResize"
+                 WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="None"
+                 ShowInTaskbar="False"
+                 Background="{DynamicResource RdSurface}">
+    <StackPanel>
+        <ui:TitleBar x:Name="TitleBar" Title="Área de Trabalho Remota" ShowMaximize="False" ShowMinimize="False" />
+        <Border x:Name="EnvBar" Height="3" Background="{DynamicResource RdAccent}" />
+        <StackPanel Margin="24,14,24,20">
+            <StackPanel Orientation="Horizontal">
+                <ui:SymbolIcon x:Name="KindIcon" Symbol="Desktop20" FontSize="22" Margin="0,0,10,0" Foreground="{DynamicResource RdAccent}" />
+                <TextBlock x:Name="HeaderText" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+            <TextBlock x:Name="HostText" Margin="32,2,0,14" Foreground="{DynamicResource RdTextDim}" />
+
+            <TextBlock Text="Usuário" Margin="0,0,0,4" />
+            <ComboBox x:Name="UserBox" IsEditable="True" SelectionChanged="OnUserChanged"
+                      ToolTip="Usuário do Windows: usuario, DOMINIO\usuario ou usuario@dominio" />
+            <TextBlock x:Name="UserHint" Text="Ex.: Administrador, EMPRESA\joao ou joao@empresa.local" FontSize="11" Margin="0,4,0,10" Foreground="{DynamicResource RdTextDim}" />
+
+            <TextBlock Text="Senha" Margin="0,0,0,4" />
+            <ui:PasswordBox x:Name="PasswordBox" PlaceholderText="Senha" />
+            <TextBlock x:Name="SavedHint" FontSize="11" Margin="0,4,0,0" Foreground="{DynamicResource RdTextDim}" Visibility="Collapsed"
+                       Text="Senha salva no Cofre do Windows: deixe em branco para usá-la, ou digite outra." />
+
+            <CheckBox x:Name="RememberBox" Margin="0,12,0,0" Content="Lembrar a senha (Cofre do Windows)" />
+            <TextBlock x:Name="ErrorText" Foreground="{DynamicResource RdProd}" Margin="0,8,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <ui:Button Content="Cancelar" IsCancel="True" Margin="0,0,8,0" MinWidth="96" Click="OnCancel" />
+                <ui:Button Content="Conectar" IsDefault="True" Appearance="Primary" MinWidth="110" Click="OnConnect" />
+            </StackPanel>
+        </StackPanel>
+    </StackPanel>
+</ui:FluentWindow>

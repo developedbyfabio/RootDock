@@ -1,0 +1,398 @@
+﻿<ui:FluentWindow x:Class="RootDock.App.Dialogs.SessionEditorWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="Sessão"
+                 Width="580"
+                 SizeToContent="Height"
+                 ResizeMode="NoResize"
+                 WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="None"
+                 ShowInTaskbar="False"
+                 Background="{DynamicResource RdSurface}">
+    <ui:FluentWindow.Resources>
+        <!-- Abas Simples / Avançado -->
+        <Style x:Key="ModeTab" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource RdTextDim}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Tab" Background="Transparent" Padding="16,8" Margin="0,0,4,0" BorderThickness="0,0,0,2" BorderBrush="Transparent">
+                            <ContentPresenter HorizontalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource RdText}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource RdText}" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                                <Setter TargetName="Tab" Property="BorderBrush" Value="{DynamicResource RdAccent}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Tab" Property="Background" Value="{DynamicResource RdHover}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Protocolo: botões "pílula" com ícone -->
+        <Style x:Key="KindPill" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource RdTextDim}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Pill" CornerRadius="8" Padding="12,7" BorderThickness="1" BorderBrush="{DynamicResource RdBorder}" Background="Transparent">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Pill" Property="Background" Value="{DynamicResource RdHover}" />
+                                <Setter Property="Foreground" Value="{DynamicResource RdText}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Pill" Property="BorderBrush" Value="{DynamicResource RdAccent}" />
+                                <Setter TargetName="Pill" Property="Background" Value="{DynamicResource RdAccentSoft}" />
+                                <Setter Property="Foreground" Value="{DynamicResource RdText}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Pill" Property="BorderBrush" Value="{DynamicResource RdTextDim}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </ui:FluentWindow.Resources>
+
+    <StackPanel>
+        <ui:TitleBar x:Name="TitleBar" Title="Sessão" ShowMaximize="False" ShowMinimize="False" />
+
+        <!-- Protocolo -->
+        <StackPanel Orientation="Horizontal" Margin="24,0,24,10">
+            <RadioButton x:Name="SshKind" Style="{StaticResource KindPill}" GroupName="Kind" Tag="Ssh" Checked="OnKindChanged"
+                         ToolTip="Terminal seguro (criptografado), com arquivos, túneis e chaves">
+                <StackPanel Orientation="Horizontal">
+                    <ui:SymbolIcon Symbol="WindowConsole20" FontSize="16" Margin="0,0,7,0" />
+                    <TextBlock Text="SSH" VerticalAlignment="Center" />
+                </StackPanel>
+            </RadioButton>
+            <RadioButton x:Name="TelnetKind" Style="{StaticResource KindPill}" GroupName="Kind" Tag="Telnet" Checked="OnKindChanged"
+                         ToolTip="Equipamentos e sistemas legados (sem criptografia)">
+                <StackPanel Orientation="Horizontal">
+                    <ui:SymbolIcon Symbol="PlugConnected20" FontSize="16" Margin="0,0,7,0" />
+                    <TextBlock Text="Telnet" VerticalAlignment="Center" />
+                </StackPanel>
+            </RadioButton>
+            <RadioButton x:Name="SerialKind" Style="{StaticResource KindPill}" GroupName="Kind" Tag="Serial" Checked="OnKindChanged"
+                         ToolTip="Console de switches, roteadores e equipamentos pela porta COM / USB-serial">
+                <StackPanel Orientation="Horizontal">
+                    <ui:SymbolIcon Symbol="SerialPort20" FontSize="16" Margin="0,0,7,0" />
+                    <TextBlock Text="Serial" VerticalAlignment="Center" />
+                </StackPanel>
+            </RadioButton>
+            <RadioButton x:Name="RdpKind" Style="{StaticResource KindPill}" GroupName="Kind" Tag="Rdp" Checked="OnKindChanged"
+                         ToolTip="Área de Trabalho Remota do Windows (RDP), numa aba do RootDock">
+                <StackPanel Orientation="Horizontal">
+                    <ui:SymbolIcon Symbol="Desktop20" FontSize="16" Margin="0,0,7,0" />
+                    <TextBlock Text="RDP" VerticalAlignment="Center" />
+                </StackPanel>
+            </RadioButton>
+            <RadioButton x:Name="VncKind" Style="{StaticResource KindPill}" GroupName="Kind" Tag="Vnc" Checked="OnKindChanged"
+                         ToolTip="Acesso gráfico por VNC (Linux, Mac, equipamentos com tela), numa aba do RootDock">
+                <StackPanel Orientation="Horizontal">
+                    <ui:SymbolIcon Symbol="DesktopCursor20" FontSize="16" Margin="0,0,7,0" />
+                    <TextBlock Text="VNC" VerticalAlignment="Center" />
+                </StackPanel>
+            </RadioButton>
+            <RadioButton x:Name="FtpKind" Style="{StaticResource KindPill}" GroupName="Kind" Tag="Ftp" Checked="OnKindChanged"
+                         ToolTip="FTP ou FTPS: abre direto no gerenciador de arquivos (computador e servidor lado a lado)">
+                <StackPanel Orientation="Horizontal">
+                    <ui:SymbolIcon Symbol="FolderArrowUp20" FontSize="16" Margin="0,0,7,0" />
+                    <TextBlock Text="FTP" VerticalAlignment="Center" />
+                </StackPanel>
+            </RadioButton>
+        </StackPanel>
+
+        <!-- Simples / Avançado -->
+        <Border Margin="24,0,24,8" BorderBrush="{DynamicResource RdBorder}" BorderThickness="0,0,0,1">
+            <StackPanel Orientation="Horizontal">
+                <RadioButton x:Name="SimpleTab" Style="{StaticResource ModeTab}" GroupName="EditorMode" Content="Simples" Checked="OnModeChanged"
+                             ToolTip="Só o essencial para conectar" />
+                <RadioButton x:Name="AdvancedTab" Style="{StaticResource ModeTab}" GroupName="EditorMode" Content="Avançado" Checked="OnModeChanged"
+                             ToolTip="Nome, pasta, tags, ambiente, empresa e as opções do protocolo" />
+            </StackPanel>
+        </Border>
+        <TextBlock x:Name="ModeHint" Margin="24,0,24,4" FontSize="12" Foreground="{DynamicResource RdTextDim}" TextWrapping="Wrap" />
+        <TextBlock x:Name="TelnetWarning" Margin="24,0,24,4" FontSize="12" Foreground="{DynamicResource RdStaging}" TextWrapping="Wrap"
+                   Text="Telnet não é criptografado (usuário e senha passam em texto puro): use só em rede confiável." />
+
+        <StackPanel x:Name="Fields" Margin="24,4,24,12">
+            <Grid x:Name="NameField" Margin="0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Nome" Style="{StaticResource FieldLabel}" />
+                <ui:TextBox Grid.Column="1" x:Name="NameBox" PlaceholderText="ex.: Servidor web 01 (vazio = o endereço)" />
+            </Grid>
+
+            <Grid x:Name="FolderField" Margin="0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Pasta" Style="{StaticResource FieldLabel}" />
+                <ComboBox Grid.Column="1" x:Name="FolderBox" IsEditable="True" />
+            </Grid>
+
+            <Grid x:Name="HostField" Margin="0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="90" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Servidor" Style="{StaticResource FieldLabel}" />
+                <ui:TextBox Grid.Column="1" x:Name="HostBox" PlaceholderText="IP ou nome do host" />
+                <TextBlock Grid.Column="2" Text="Porta" Margin="12,0,8,0" VerticalAlignment="Center" />
+                <ui:TextBox Grid.Column="3" x:Name="PortBox" Text="22" />
+            </Grid>
+
+            <Grid x:Name="SerialPortField" Margin="0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="120" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Porta serial" Style="{StaticResource FieldLabel}" />
+                <ComboBox Grid.Column="1" x:Name="SerialPortBox" IsEditable="True" ToolTip="Portas COM encontradas neste computador (adaptador USB-serial aparece aqui)" />
+                <TextBlock Grid.Column="2" Text="Velocidade" Margin="12,0,8,0" VerticalAlignment="Center" />
+                <ComboBox Grid.Column="3" x:Name="BaudBox" IsEditable="True" ToolTip="Baud rate. Consoles de switch/roteador: quase sempre 9600" />
+            </Grid>
+
+            <Grid x:Name="SerialDetailsField" Margin="0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="92" />
+                    <ColumnDefinition Width="6" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="6" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock Text="Formato" Style="{StaticResource FieldLabel}" ToolTip="Bits de dados, paridade e bits de parada" />
+                <ComboBox Grid.Column="1" x:Name="DataBitsBox" ToolTip="Bits de dados">
+                    <ComboBoxItem Content="8 bits" Tag="8" />
+                    <ComboBoxItem Content="7 bits" Tag="7" />
+                    <ComboBoxItem Content="6 bits" Tag="6" />
+                    <ComboBoxItem Content="5 bits" Tag="5" />
+                </ComboBox>
+                <ComboBox Grid.Column="3" x:Name="ParityBox" ToolTip="Paridade">
+                    <ComboBoxItem Content="Sem paridade" Tag="None" />
+                    <ComboBoxItem Content="Paridade par" Tag="Even" />
+                    <ComboBoxItem Content="Paridade ímpar" Tag="Odd" />
+                    <ComboBoxItem Content="Marca" Tag="Mark" />
+                    <ComboBoxItem Content="Espaço" Tag="Space" />
+                </ComboBox>
+                <ComboBox Grid.Column="5" x:Name="StopBitsBox" ToolTip="Bits de parada">
+                    <ComboBoxItem Content="1 parada" Tag="One" />
+                    <ComboBoxItem Content="1,5 parada" Tag="OnePointFive" />
+                    <ComboBoxItem Content="2 paradas" Tag="Two" />
+                </ComboBox>
+                <TextBlock Grid.Row="1" Text="Controle de fluxo" Style="{StaticResource FieldLabel}" Margin="0,8,0,0" />
+                <ComboBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="5" x:Name="FlowBox" Margin="0,8,0,0" ToolTip="Controle de fluxo">
+                    <ComboBoxItem Content="Nenhum (o mais comum em consoles)" Tag="None" />
+                    <ComboBoxItem Content="XON/XOFF (por software)" Tag="XonXoff" />
+                    <ComboBoxItem Content="RTS/CTS (por hardware)" Tag="RtsCts" />
+                </ComboBox>
+            </Grid>
+
+            <Grid x:Name="UserField" Margin="0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Usuário" Style="{StaticResource FieldLabel}" />
+                <ui:TextBox Grid.Column="1" x:Name="UserBox" PlaceholderText="Vazio = pedir no terminal ao conectar" />
+            </Grid>
+
+            <Grid x:Name="RdpOptionsField" Margin="0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock Text="Resolução" Style="{StaticResource FieldLabel}" />
+                <ComboBox Grid.Column="1" x:Name="RdpResolutionBox" IsEditable="True"
+                          ToolTip="Automática: a área de trabalho acompanha o tamanho da aba (inclusive ao dividir a tela). Ou escolha um tamanho fixo." />
+                <TextBlock Grid.Row="1" Text="Recursos" Style="{StaticResource FieldLabel}" VerticalAlignment="Top" Margin="0,10,0,0" />
+                <WrapPanel Grid.Row="1" Grid.Column="1" Margin="0,8,0,0">
+                    <CheckBox x:Name="RdpClipboardBox" Content="Copiar e colar" Margin="0,0,16,4" ToolTip="Área de transferência compartilhada (texto e arquivos)" />
+                    <CheckBox x:Name="RdpDrivesBox" Content="Discos deste PC" Margin="0,0,16,4" ToolTip="Os discos deste computador aparecem no servidor (para levar arquivos)" />
+                    <CheckBox x:Name="RdpPrintersBox" Content="Impressoras" Margin="0,0,16,4" ToolTip="As impressoras deste computador aparecem no servidor" />
+                    <CheckBox x:Name="RdpAudioBox" Content="Som" Margin="0,0,16,4" ToolTip="O som do servidor toca neste computador" />
+                    <CheckBox x:Name="RdpAdminBox" Content="Sessão de administração" Margin="0,0,16,4" ToolTip="Conecta na sessão de console/administração (igual a mstsc /admin)" />
+                    <CheckBox x:Name="RdpWindowsKeysBox" Content="Atalhos do Windows no servidor" Margin="0,0,16,4"
+                              ToolTip="Com o foco na Área de Trabalho Remota, a tecla Windows, Win+R, Alt+Tab e Ctrl+Esc vão para o servidor. Desmarcado: só em tela cheia (Alt+Tab troca de programa neste computador)." />
+                </WrapPanel>
+            </Grid>
+
+            <Grid x:Name="FtpOptionsField" Margin="0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock Text="Segurança" Style="{StaticResource FieldLabel}" />
+                <ComboBox Grid.Column="1" x:Name="FtpSecurityBox" SelectionChanged="OnFtpSecurityChanged">
+                    <ComboBoxItem Content="FTPS explícito (TLS na porta 21) — recomendado" Tag="Explicit" />
+                    <ComboBoxItem Content="FTPS implícito (porta 990)" Tag="Implicit" />
+                    <ComboBoxItem Content="FTP sem criptografia (senha em texto puro)" Tag="None" />
+                </ComboBox>
+                <CheckBox Grid.Row="1" Grid.Column="1" x:Name="FtpPassiveBox" Margin="0,8,0,0" Content="Modo passivo (recomendado)"
+                          ToolTip="Deixe ligado. Desligue só se o servidor exigir modo ativo (redes antigas)." />
+            </Grid>
+
+            <Grid x:Name="KeyField" Margin="0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Chave privada" Style="{StaticResource FieldLabel}" />
+                <ui:TextBox Grid.Column="1" x:Name="KeyBox" PlaceholderText="Opcional (OpenSSH ou PuTTY .ppk)" />
+                <ui:Button Grid.Column="2" Content="Procurar..." Margin="8,0,0,0" Click="OnBrowseKey" />
+            </Grid>
+
+            <Grid x:Name="EnvironmentField" Margin="0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Ambiente" Style="{StaticResource FieldLabel}" />
+                <ComboBox Grid.Column="1" x:Name="EnvironmentBox">
+                    <ComboBoxItem Content="Não informado" Tag="None" />
+                    <ComboBoxItem Content="Desenvolvimento" Tag="Development" />
+                    <ComboBoxItem Content="Homologação" Tag="Staging" />
+                    <ComboBoxItem Content="Produção (destaque vermelho e confirmação ao colar)" Tag="Production" />
+                </ComboBox>
+            </Grid>
+
+            <Grid x:Name="TagsField" Margin="0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Tags" Style="{StaticResource FieldLabel}" VerticalAlignment="Top" Margin="0,8,0,0" />
+                <StackPanel Grid.Column="1">
+                    <WrapPanel x:Name="TagChips" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ComboBox x:Name="TagInput" IsEditable="True" PreviewKeyDown="OnTagKeyDown"
+                                  ToolTip="Escolha uma tag existente ou digite uma nova e tecle Enter (ex.: BANCO, CRÍTICO, BACKUP)" />
+                        <ui:Button Grid.Column="1" Content="Adicionar" Margin="8,0,0,0" Click="OnAddTag" />
+                    </Grid>
+                </StackPanel>
+            </Grid>
+
+            <Grid x:Name="StartupField" Margin="0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Comando inicial" Style="{StaticResource FieldLabel}" />
+                <ui:TextBox Grid.Column="1" x:Name="StartupBox" PlaceholderText="Opcional, ex.: cd /srv/www" />
+            </Grid>
+
+            <Grid x:Name="NotesField" Margin="0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Observações" Style="{StaticResource FieldLabel}" VerticalAlignment="Top" Margin="0,8,0,0" />
+                <ui:TextBox Grid.Column="1" x:Name="NotesBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="56" />
+            </Grid>
+
+            <Grid x:Name="LoginsField" Margin="0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Logins salvos" Style="{StaticResource FieldLabel}" />
+                <StackPanel Grid.Column="1">
+                    <TextBlock x:Name="LoginsText" TextWrapping="Wrap" />
+                    <TextBlock Text="Para adicionar, trocar senha ou remover: botão direito na sessão → Logins salvos."
+                               TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource RdTextDim}" />
+                </StackPanel>
+            </Grid>
+
+            <Border x:Name="AdvancedSeparator" Height="1" Background="{DynamicResource RdBorder}" Margin="0,10,0,6" />
+
+            <Grid x:Name="CompanyField" Margin="0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="8" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Empresa / filial" Style="{StaticResource FieldLabel}" />
+                <ComboBox Grid.Column="1" x:Name="CompanyBox" IsEditable="True" ToolTip="Empresa ou cliente (para agrupar a lista)" />
+                <ComboBox Grid.Column="3" x:Name="BranchBox" IsEditable="True" ToolTip="Filial, unidade ou site" />
+            </Grid>
+
+            <Grid x:Name="JumpField" Margin="0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Bastion (ProxyJump)" Style="{StaticResource FieldLabel}" />
+                <ComboBox Grid.Column="1" x:Name="JumpBox" DisplayMemberPath="Name"
+                          ToolTip="Entra primeiro nesta outra sessão e, a partir dela, neste servidor (servidores sem acesso direto)" />
+            </Grid>
+
+            <Grid x:Name="AgentField" Margin="0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <CheckBox Grid.Column="1" x:Name="AgentBox" Content="Usar as chaves do agente SSH (ssh-agent / Pageant)"
+                          ToolTip="Tenta primeiro as chaves carregadas no ssh-agent do Windows ou no Pageant do PuTTY" />
+            </Grid>
+
+            <TextBlock x:Name="ErrorText" Foreground="{DynamicResource RdProd}" Margin="0,8,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="24,0,24,20">
+            <ui:Button Content="Cancelar" IsCancel="True" Margin="0,0,8,0" MinWidth="96" Click="OnCancel" />
+            <ui:Button x:Name="SecondaryButton" Margin="0,0,8,0" MinWidth="96" Click="OnSecondary" />
+            <ui:Button x:Name="PrimaryButton" IsDefault="True" Appearance="Primary" MinWidth="110" Click="OnPrimary" />
+        </StackPanel>
+    </StackPanel>
+</ui:FluentWindow>

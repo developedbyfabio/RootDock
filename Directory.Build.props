@@ -1,0 +1,18 @@
+<Project>
+  <PropertyGroup>
+    <!-- Alvo oficial: .NET 10 (LTS, suporte até 11/2028). -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <SatelliteResourceLanguages>pt-BR;en</SatelliteResourceLanguages>
+    <Product>RootDock</Product>
+    <!-- Versão local. As versões publicadas recebem a da tag (vX.Y.Z) no workflow de release. -->
+    <Version>0.1.0</Version>
+    <Authors>Fabio Henrique de Almeida Lemes</Authors>
+    <Company>Fabio Henrique de Almeida Lemes</Company>
+    <Copyright>© 2026 Fabio Henrique de Almeida Lemes</Copyright>
+    <RepositoryUrl>https://github.com/developedbyfabio/RootDock</RepositoryUrl>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+</Project>

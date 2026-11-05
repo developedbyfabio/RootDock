@@ -1,0 +1,409 @@
+<ui:FluentWindow x:Class="RootDock.App.MainWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+                 xmlns:vm="clr-namespace:RootDock.App.ViewModels"
+                 xmlns:views="clr-namespace:RootDock.App.Views"
+                 Title="RootDock"
+                 Icon="pack://application:,,,/Assets/rootdock.ico"
+                 Width="1400"
+                 Height="860"
+                 MinWidth="820"
+                 MinHeight="520"
+                 WindowStartupLocation="CenterScreen"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="None"
+                 WindowCornerPreference="Round"
+                 Background="{DynamicResource RdBackground}">
+    <ui:FluentWindow.Resources>
+        <views:SubtractConverter x:Key="Subtract" />
+        <!-- Itens do topo da barra de menus: compactos, como no VS Code -->
+        <Style x:Key="MenuBarItem" TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+            <Setter Property="Padding" Value="9,4" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{DynamicResource RdText}" />
+        </Style>
+        <Style x:Key="SideTab" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource RdTextDim}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Root" Background="Transparent" Padding="0,9,0,7" BorderThickness="0,0,0,2" BorderBrush="Transparent">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <ContentPresenter />
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource RdAccent}" />
+                                <Setter Property="Foreground" Value="{DynamicResource RdText}" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource RdText}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </ui:FluentWindow.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Barra de título como a do VS Code: logo no canto, menus ao lado (o resto continua arrastável) -->
+        <ui:TitleBar Grid.Row="0" x:Name="AppTitleBar" Title="RootDock" Background="{DynamicResource RdSurface}">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="pack://application:,,,/Assets/rootdock-64.png" Width="18" Height="18" />
+            </ui:TitleBar.Icon>
+            <ui:TitleBar.Header>
+                <Menu x:Name="MainMenu" Background="Transparent" VerticalAlignment="Center" Margin="4,0,0,0" FontSize="13"
+                      ItemContainerStyle="{StaticResource MenuBarItem}" />
+            </ui:TitleBar.Header>
+            <!-- Aparece quando uma versão nova terminou de baixar (como o "Restart to Update" do VS Code) -->
+            <ui:TitleBar.TrailingContent>
+                <ui:Button x:Name="UpdatePill" Visibility="Collapsed" Appearance="Primary" Click="OnUpdatePill"
+                           AutomationProperties.Name="Reiniciar para atualizar"
+                           Padding="10,3" Margin="0,0,10,0" FontSize="12" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="ArrowCircleUp20" FontSize="15" Margin="0,0,6,0" />
+                        <TextBlock Text="Reiniciar para atualizar" VerticalAlignment="Center" />
+                    </StackPanel>
+                </ui:Button>
+            </ui:TitleBar.TrailingContent>
+        </ui:TitleBar>
+
+        <!-- Barra de ferramentas -->
+        <Border Grid.Row="1" Background="{DynamicResource RdSurface}" BorderBrush="{DynamicResource RdBorder}" BorderThickness="0,0,0,1" Padding="10,6">
+            <DockPanel LastChildFill="False">
+                <ui:Button DockPanel.Dock="Left" Content="Nova sessão" Click="OnNewSession" Margin="0,0,6,0"
+                           Icon="{ui:SymbolIcon Add24}" ToolTip="Criar uma sessão SSH salva" />
+                <ui:Button DockPanel.Dock="Left" x:Name="LocalShellButton" Content="Terminal local" Click="OnLocalShellMenu" Margin="0,0,6,0"
+                           Icon="{ui:SymbolIcon WindowConsole20}" ToolTip="PowerShell, CMD, WSL... (Ctrl+Shift+T)" />
+                <ui:Button DockPanel.Dock="Left" Content="Importar" Click="OnImportMenu" Margin="0,0,6,0"
+                           Icon="{ui:SymbolIcon ArrowImport24}" ToolTip="Traz sessões do MobaXterm (MobaXterm.ini) ou do OpenSSH (~/.ssh/config)" />
+                <ui:Button DockPanel.Dock="Left" Content="Chave SSH" Click="OnSshKey" Margin="0,0,6,0"
+                           Icon="{ui:SymbolIcon Key20}" ToolTip="Ver ou criar a chave SSH deste computador (entrar nos servidores sem senha)" />
+                <ui:Button DockPanel.Dock="Left" Content="Executar em vários" Click="OnMultiExec" Margin="0,0,6,0"
+                           Icon="{ui:SymbolIcon ServerMultiple20}" ToolTip="Rodar o mesmo comando em vários servidores ao mesmo tempo, com o resultado de cada um" />
+                <ui:Button DockPanel.Dock="Left" x:Name="ToolsButton" Content="Ferramentas" Click="OnToolsMenu"
+                           Icon="{ui:SymbolIcon Toolbox20}" ToolTip="Rede (ping, DNS, portas...), histórico de comandos e aparência do terminal" />
+
+                <ui:Button DockPanel.Dock="Right" Content="Conectar" Appearance="Primary" Click="OnQuickConnect" Margin="6,0,0,0" />
+                <ui:TextBox DockPanel.Dock="Right" x:Name="QuickConnectBox" Width="280"
+                            PlaceholderText="IP ou usuario@host:porta" ToolTip="Conexão rápida (Ctrl+Shift+K): só o IP pede usuário e senha no terminal"
+                            Icon="{ui:SymbolIcon PlugConnected24}" KeyDown="OnQuickConnectKey" />
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="SidebarColumn" Width="280" MinWidth="180" MaxWidth="600" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" MinWidth="320" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition x:Name="CommandsColumn" Width="0" MaxWidth="640" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Barra lateral: Sessões | Arquivos -->
+            <DockPanel Grid.Column="0" Background="{DynamicResource RdSurface}">
+                <UniformGrid DockPanel.Dock="Top" Columns="2" Margin="8,4,8,0">
+                    <RadioButton x:Name="SessionsTab" Style="{StaticResource SideTab}" GroupName="Side" IsChecked="True" Checked="OnSideTabChanged">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="Server20" Margin="0,0,6,0" FontSize="15" />
+                            <TextBlock Text="Sessões" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="FilesTab" Style="{StaticResource SideTab}" GroupName="Side" Checked="OnSideTabChanged">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="FolderOpen20" Margin="0,0,6,0" FontSize="15" />
+                            <TextBlock Text="Arquivos" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </RadioButton>
+                </UniformGrid>
+                <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource RdBorder}" />
+
+                <Grid>
+                <views:FilesPanel x:Name="FilesView" Visibility="Collapsed" />
+
+                <DockPanel x:Name="SessionsView">
+                <Grid DockPanel.Dock="Top" Margin="8,8,8,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ui:TextBox x:Name="SearchBox" PlaceholderText="Buscar sessões"
+                                Icon="{ui:SymbolIcon Search24}" TextChanged="OnSearchChanged" ClearButtonEnabled="True" />
+                    <ComboBox Grid.Column="1" x:Name="GroupingBox" Margin="6,0,0,0" MinWidth="104" SelectionChanged="OnGroupingChanged"
+                              ToolTip="Agrupar a lista por pastas, por empresa e filial, por ambiente ou por tag">
+                        <ComboBoxItem Content="Pastas" Tag="Folders" />
+                        <ComboBoxItem Content="Empresa" Tag="Company" />
+                        <ComboBoxItem Content="Ambiente" Tag="Environment" />
+                        <ComboBoxItem Content="Tags" Tag="Tags" />
+                    </ComboBox>
+                </Grid>
+                <!-- Solte aqui para tirar da pasta (aparece durante o arraste) -->
+                <Border DockPanel.Dock="Bottom" x:Name="RootDropZone" Visibility="Collapsed" AllowDrop="True"
+                        Margin="8,4,8,8" Padding="10,8" CornerRadius="6" BorderThickness="1"
+                        BorderBrush="{DynamicResource RdBorder}" Background="Transparent"
+                        DragOver="OnRootZoneDragOver" DragLeave="OnRootZoneDragLeave" Drop="OnRootZoneDrop">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <ui:SymbolIcon Symbol="ArrowUp20" Margin="0,0,8,0" Foreground="{DynamicResource RdTextDim}" />
+                        <TextBlock Text="Solte aqui para mover para a raiz" Foreground="{DynamicResource RdTextDim}" />
+                    </StackPanel>
+                </Border>
+
+                <TreeView x:Name="SessionTree"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                          Background="Transparent"
+                          BorderThickness="0"
+                          Padding="6,0,6,8"
+                          AllowDrop="True"
+                          MouseDoubleClick="OnTreeDoubleClick"
+                          KeyDown="OnTreeKeyDown"
+                          PreviewMouseRightButtonDown="OnTreeRightClick"
+                          ContextMenuOpening="OnTreeContextMenuOpening"
+                          PreviewMouseLeftButtonDown="OnTreeMouseDown"
+                          PreviewMouseLeftButtonUp="OnTreeMouseUp"
+                          PreviewMouseMove="OnTreeMouseMove"
+                          DragOver="OnTreeDragOver"
+                          DragLeave="OnTreeDragLeave"
+                          Drop="OnTreeDrop">
+                    <TreeView.Resources>
+                        <views:NotEmptyVisibilityConverter x:Key="TreeNotEmpty" />
+
+                        <!-- Seta de abrir/fechar pasta: gira 90° ao abrir -->
+                        <Style x:Key="TreeChevron" TargetType="ToggleButton">
+                            <Setter Property="Focusable" Value="False" />
+                            <Setter Property="Width" Value="20" />
+                            <Setter Property="Height" Value="20" />
+                            <Setter Property="Cursor" Value="Hand" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="Transparent">
+                                            <Path x:Name="Arrow" Data="M 0,0 L 4,4 L 0,8" Width="5" Height="9" Stretch="None"
+                                                  Stroke="{DynamicResource RdTextDim}" StrokeThickness="1.6"
+                                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                                <Path.RenderTransform>
+                                                    <RotateTransform Angle="0" />
+                                                </Path.RenderTransform>
+                                            </Path>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Trigger.EnterActions>
+                                                    <BeginStoryboard>
+                                                        <Storyboard>
+                                                            <DoubleAnimation Storyboard.TargetName="Arrow" Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                             To="90" Duration="0:0:0.12" />
+                                                        </Storyboard>
+                                                    </BeginStoryboard>
+                                                </Trigger.EnterActions>
+                                                <Trigger.ExitActions>
+                                                    <BeginStoryboard>
+                                                        <Storyboard>
+                                                            <DoubleAnimation Storyboard.TargetName="Arrow" Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                             To="0" Duration="0:0:0.12" />
+                                                        </Storyboard>
+                                                    </BeginStoryboard>
+                                                </Trigger.ExitActions>
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Arrow" Property="Stroke" Value="{DynamicResource RdText}" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+
+                        <HierarchicalDataTemplate DataType="{x:Type vm:FolderNode}" ItemsSource="{Binding Children}">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="Folder20" Filled="{Binding IsExpanded}" FontSize="16" Margin="0,0,8,0" Foreground="{DynamicResource RdStaging}" />
+                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" FontWeight="Medium" />
+                                <Border CornerRadius="9" Background="{DynamicResource RdChip}" Padding="7,1" Margin="8,0,0,0" MinWidth="22" VerticalAlignment="Center"
+                                        Visibility="{Binding CountText, Converter={StaticResource TreeNotEmpty}}"
+                                        ToolTip="Sessões nesta pasta (incluindo subpastas)">
+                                    <TextBlock Text="{Binding CountText}" FontSize="11" Foreground="{DynamicResource RdTextDim}" HorizontalAlignment="Center" />
+                                </Border>
+                            </StackPanel>
+                        </HierarchicalDataTemplate>
+
+                        <DataTemplate DataType="{x:Type vm:SessionNode}">
+                            <!-- Nome (corta com "..." se faltar espaço) e, na frente, protocolo e tags -->
+                            <!-- O nome tem prioridade (só corta se não couber nem com o "+N"); as tags ocupam o resto. -->
+                            <Grid x:Name="SessionRow" ToolTip="{Binding ToolTip}" ClipToBounds="True">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Width="8" Height="8" Margin="4,0,10,0" Fill="{Binding EnvironmentBrush}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                           MaxWidth="{Binding ActualWidth, ElementName=SessionRow, Converter={StaticResource Subtract}, ConverterParameter=58}" />
+                                <DockPanel Grid.Column="2" VerticalAlignment="Center" Margin="6,0,0,0" LastChildFill="True">
+                                    <Border DockPanel.Dock="Left" CornerRadius="4" Padding="4,0,4,1" Margin="0,0,4,0" BorderThickness="1" BorderBrush="{DynamicResource RdGuide}" VerticalAlignment="Center">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding KindLabel}" Value="">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock Text="{Binding KindLabel}" FontSize="9.5" FontWeight="SemiBold" Foreground="{DynamicResource RdTextDim}" />
+                                    </Border>
+                                    <views:TagStrip Tags="{Binding TagChips}" VerticalAlignment="Center" />
+                                </DockPanel>
+                            </Grid>
+                        </DataTemplate>
+
+                        <DataTemplate DataType="{x:Type vm:SectionNode}">
+                            <TextBlock Text="{Binding Name}" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource RdTextDim}"
+                                       Margin="-16,14,0,2" Opacity="0.85" />
+                        </DataTemplate>
+                    </TreeView.Resources>
+                    <!-- Marcador: o menu real é montado em OnTreeContextMenuOpening -->
+                    <TreeView.ContextMenu>
+                        <ContextMenu />
+                    </TreeView.ContextMenu>
+                    <TreeView.ItemContainerStyle>
+                        <!--
+                            Item da árvore desenhado do zero: linha arredondada com realce ao passar o mouse,
+                            barra azul no selecionado e linha guia vertical ligando a pasta ao seu conteúdo.
+                        -->
+                        <Style TargetType="TreeViewItem">
+                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+                            <!-- Leitores de tela e automação: o nome do item, não o tipo do objeto -->
+                            <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+                            <Setter Property="Foreground" Value="{DynamicResource RdText}" />
+                            <Setter Property="FontSize" Value="13.5" />
+                            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="TreeViewItem">
+                                        <StackPanel>
+                                            <Border x:Name="Row" CornerRadius="6" Margin="0,1" MinHeight="30" Padding="0,0,8,0"
+                                                    Background="Transparent" BorderBrush="Transparent" BorderThickness="1">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="22" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border x:Name="SelectionBar" Width="3" CornerRadius="2" HorizontalAlignment="Left"
+                                                            Margin="0,6" Background="{DynamicResource RdAccent}" Visibility="Collapsed" />
+                                                    <ToggleButton x:Name="Expander" Style="{StaticResource TreeChevron}" ClickMode="Press"
+                                                                  IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" />
+                                                    <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center" />
+                                                </Grid>
+                                            </Border>
+                                            <!-- Conteúdo da pasta, pendurado na linha guia -->
+                                            <Border x:Name="ChildrenHost" Margin="11,0,0,2" Padding="8,0,0,0"
+                                                    BorderThickness="1,0,0,0" BorderBrush="{DynamicResource RdGuide}">
+                                                <ItemsPresenter />
+                                            </Border>
+                                        </StackPanel>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsExpanded" Value="False">
+                                                <Setter TargetName="ChildrenHost" Property="Visibility" Value="Collapsed" />
+                                            </Trigger>
+                                            <Trigger Property="HasItems" Value="False">
+                                                <Setter TargetName="Expander" Property="Visibility" Value="Hidden" />
+                                                <Setter TargetName="ChildrenHost" Property="Visibility" Value="Collapsed" />
+                                            </Trigger>
+                                            <!-- Mouse sobre a pasta ou o conteúdo dela: a linha guia clareia -->
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="ChildrenHost" Property="BorderBrush" Value="{DynamicResource RdGuideActive}" />
+                                            </Trigger>
+                                            <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource RdHover}" />
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource RdHoverStrong}" />
+                                                <Setter TargetName="SelectionBar" Property="Visibility" Value="Visible" />
+                                            </Trigger>
+                                            <DataTrigger Binding="{Binding IsInSelection}" Value="True">
+                                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource RdHoverStrong}" />
+                                                <Setter TargetName="SelectionBar" Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
+                                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource RdAccentSoft}" />
+                                                <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource RdAccent}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsSection}" Value="True">
+                                                <Setter TargetName="Row" Property="MinHeight" Value="0" />
+                                                <Setter TargetName="Row" Property="Background" Value="Transparent" />
+                                                <Setter TargetName="Expander" Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <!-- Rótulo de seção: não recebe foco, seleção nem mouse (soltar ali vai para a raiz) -->
+                                <DataTrigger Binding="{Binding IsSection}" Value="True">
+                                    <Setter Property="Focusable" Value="False" />
+                                    <Setter Property="IsHitTestVisible" Value="False" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TreeView.ItemContainerStyle>
+                </TreeView>
+                </DockPanel>
+                </Grid>
+            </DockPanel>
+
+            <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Stretch" Background="{DynamicResource RdBorder}"
+                          ResizeBehavior="PreviousAndNext" ResizeDirection="Columns" />
+
+            <!-- Terminais -->
+            <wv2:WebView2 Grid.Column="2" x:Name="WebView" DefaultBackgroundColor="#11141A" />
+            <!-- Área de Trabalho Remota: o controle do Windows fica por cima do espaço da aba -->
+            <Canvas Grid.Column="2" x:Name="RdpLayer" ClipToBounds="True" />
+
+            <!-- Biblioteca de comandos (lado direito, recolhível) -->
+            <GridSplitter Grid.Column="3" x:Name="CommandsSplitter" Width="4" HorizontalAlignment="Stretch" Background="{DynamicResource RdBorder}"
+                          ResizeBehavior="PreviousAndNext" ResizeDirection="Columns" Visibility="Collapsed" />
+            <views:CommandsPanel Grid.Column="4" x:Name="CommandsView" Visibility="Collapsed" />
+        </Grid>
+
+        <!-- Barra de status -->
+        <Border Grid.Row="3" Background="{DynamicResource RdSurface}" BorderBrush="{DynamicResource RdBorder}" BorderThickness="0,1,0,0" MinHeight="28">
+            <DockPanel LastChildFill="True">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="8,0,12,0">
+                    <ui:Button x:Name="TunnelsBadge" Appearance="Transparent" Padding="8,2" Margin="0,0,10,0" Click="OnTunnelsBadge"
+                               Visibility="Collapsed" ToolTip="Túneis abertos nesta sessão (clique para gerenciar)">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="ArrowSwap20" FontSize="14" Foreground="{DynamicResource RdDev}" />
+                            <TextBlock x:Name="TunnelsText" Margin="6,0,0,0" FontSize="12" Foreground="{DynamicResource RdDev}" />
+                        </StackPanel>
+                    </ui:Button>
+                    <Ellipse x:Name="ActiveDot" Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center" Visibility="Collapsed" />
+                    <TextBlock x:Name="ActiveText" Foreground="{DynamicResource RdTextDim}" FontSize="12" VerticalAlignment="Center" />
+                    <Border x:Name="ProdBadge" Background="{DynamicResource RdProd}" CornerRadius="3" Padding="6,0" Margin="10,0,0,0" VerticalAlignment="Center" Visibility="Collapsed">
+                        <TextBlock Text="PRODUÇÃO" Foreground="{DynamicResource RdOnAccent}" FontSize="11" FontWeight="SemiBold" />
+                    </Border>
+                </StackPanel>
+                <Grid>
+                    <views:ServerStatusBar x:Name="ServerBar" Visibility="Collapsed" VerticalAlignment="Center" />
+                    <TextBlock x:Name="SummaryText" Foreground="{DynamicResource RdTextDim}" FontSize="12" VerticalAlignment="Center" Margin="12,0" />
+                    <Border x:Name="NoticeBar" Background="{DynamicResource RdSurface}" Visibility="Collapsed" Padding="12,0">
+                        <TextBlock x:Name="NoticeText" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    </Border>
+                </Grid>
+            </DockPanel>
+        </Border>
+    </Grid>
+</ui:FluentWindow>

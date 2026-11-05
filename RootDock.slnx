@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/RootDock.App/RootDock.App.csproj" />
+    <Project Path="src/RootDock.Core/RootDock.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/RootDock.Core.Tests/RootDock.Core.Tests.csproj" />
+  </Folder>
+</Solution>

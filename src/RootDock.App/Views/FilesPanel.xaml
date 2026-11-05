@@ -1,0 +1,199 @@
+<UserControl x:Class="RootDock.App.Views.FilesPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:views="clr-namespace:RootDock.App.Views"
+             xmlns:remote="clr-namespace:RootDock.App.Remote"
+             xmlns:services="clr-namespace:RootDock.App.Services">
+    <UserControl.Resources>
+        <views:EqualsVisibilityConverter x:Key="StateIs" />
+        <views:NotEmptyVisibilityConverter x:Key="NotEmpty" />
+        <BooleanToVisibilityConverter x:Key="BoolVis" />
+        <views:InverseBoolVisibilityConverter x:Key="InverseBoolVis" />
+        <Style x:Key="ToolButton" TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
+            <Setter Property="Appearance" Value="Transparent" />
+            <Setter Property="Padding" Value="6" />
+            <Setter Property="Margin" Value="0,0,2,0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <!-- Sem sessão SSH nem Área de Trabalho Remota ativa -->
+        <StackPanel x:Name="Placeholder" VerticalAlignment="Center" Margin="24" Visibility="Collapsed">
+            <ui:SymbolIcon Symbol="FolderOpen20" FontSize="40" Foreground="{DynamicResource RdTextDim}" HorizontalAlignment="Center" />
+            <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" TextAlignment="Center" Foreground="{DynamicResource RdTextDim}"
+                       Text="Os arquivos do servidor aparecem aqui quando um terminal SSH ou uma Área de Trabalho Remota está ativa." />
+        </StackPanel>
+
+        <!-- Área de Trabalho Remota ativa: arquivos do servidor Windows (SMB) -->
+        <StackPanel x:Name="RdpCard" VerticalAlignment="Center" Margin="20" Visibility="Collapsed">
+            <ui:SymbolIcon Symbol="Desktop20" FontSize="40" Foreground="{DynamicResource RdAccent}" HorizontalAlignment="Center" />
+            <TextBlock x:Name="RdpCardTitle" Margin="0,12,0,0" FontWeight="SemiBold" FontSize="14" TextAlignment="Center" TextWrapping="Wrap" />
+            <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" TextAlignment="Center" Foreground="{DynamicResource RdTextDim}" FontSize="12.5"
+                       Text="Os arquivos deste computador e os do servidor lado a lado: arraste ou use as setas para copiar nos dois sentidos." />
+            <ui:Button x:Name="RdpFilesButton" Content="Abrir arquivos lado a lado" Icon="{ui:SymbolIcon ArrowSwap20}" Appearance="Primary"
+                       HorizontalAlignment="Center" Margin="0,16,0,0" Padding="14,8" Click="OnOpenRdpFiles" />
+            <TextBlock Margin="0,14,0,0" TextWrapping="Wrap" TextAlignment="Center" Foreground="{DynamicResource RdTextDim}" FontSize="11"
+                       Text="Usa o compartilhamento de arquivos do Windows (porta 445) com o mesmo login da Área de Trabalho Remota. Para ver as unidades (C:, D:) o usuário precisa ser administrador do servidor." />
+        </StackPanel>
+
+        <DockPanel x:Name="ContentRoot" LastChildFill="True">
+            <!-- Gerenciador em duas colunas (como o WinSCP) -->
+            <ui:Button x:Name="ManagerButton" DockPanel.Dock="Top" Margin="8,8,8,0" Padding="10,7" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                       Content="Abrir lado a lado" Icon="{ui:SymbolIcon ArrowSwap20}" Click="OnOpenManager"
+                       AutomationProperties.Name="Abrir lado a lado"
+                       ToolTip="Gerenciador em duas colunas, como o WinSCP: este computador e o servidor lado a lado (arrastar, copiar, renomear, excluir, comparar, sincronizar)" />
+            <!-- Caminho -->
+            <Grid DockPanel.Dock="Top" Margin="8,8,8,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <ui:Button Style="{StaticResource ToolButton}" Icon="{ui:SymbolIcon ArrowUp20}" ToolTip="Pasta acima (Backspace)" Click="OnUp" />
+                <ui:Button Grid.Column="1" Style="{StaticResource ToolButton}" Icon="{ui:SymbolIcon Home20}" ToolTip="Pasta pessoal" Click="OnHome" />
+                <ui:TextBox Grid.Column="2" x:Name="PathBox" Text="{Binding PathInput, UpdateSourceTrigger=PropertyChanged}"
+                            FontFamily="Cascadia Mono, Consolas" FontSize="12" Padding="8,5" KeyDown="OnPathKey"
+                            ToolTip="Digite um caminho e pressione Enter" />
+                <ui:Button Grid.Column="3" Style="{StaticResource ToolButton}" Icon="{ui:SymbolIcon ArrowClockwise20}" ToolTip="Atualizar (F5)" Click="OnRefresh" Margin="2,0,0,0" />
+            </Grid>
+
+            <!-- Ações -->
+            <DockPanel DockPanel.Dock="Top" Margin="8,0,8,4" LastChildFill="True">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                    <ui:Button Style="{StaticResource ToolButton}" Icon="{ui:SymbolIcon FolderAdd20}" ToolTip="Nova pasta" Click="OnNewFolder" />
+                    <ui:Button Style="{StaticResource ToolButton}" Icon="{ui:SymbolIcon DocumentAdd20}" ToolTip="Novo arquivo" Click="OnNewFile" />
+                    <ui:Button Style="{StaticResource ToolButton}" Icon="{ui:SymbolIcon ArrowUpload20}" ToolTip="Enviar arquivos para esta pasta (ou arraste do Windows)" Click="OnUpload" />
+                    <ui:Button Style="{StaticResource ToolButton}" Icon="{ui:SymbolIcon ArrowDownload20}" ToolTip="Baixar selecionados para Downloads" Click="OnDownloadToDownloads" />
+                    <ui:Button Style="{StaticResource ToolButton}" Icon="{ui:SymbolIcon WindowConsole20}" ToolTip="Ir para esta pasta no terminal (cd)" Click="OnCdHere" />
+                </StackPanel>
+                <ui:TextBox x:Name="FilterBox" Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="Filtrar"
+                            Icon="{ui:SymbolIcon Filter20}" FontSize="12" Padding="6,4" Margin="6,0,0,0" ClearButtonEnabled="True" />
+            </DockPanel>
+
+            <!-- Rodapé: opções e transferências -->
+            <StackPanel DockPanel.Dock="Bottom" Margin="8,4,8,8">
+                <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource RdTextDim}" FontSize="11" Margin="2,0,0,4" />
+                <CheckBox Content="Seguir a pasta do terminal" IsChecked="{Binding FollowTerminal}" FontSize="12" MinHeight="0" Padding="6,0,0,0" />
+                <CheckBox Content="Mostrar arquivos ocultos" IsChecked="{Binding ShowHidden}" FontSize="12" MinHeight="0" Padding="6,0,0,0" Margin="0,2,0,0" />
+
+                <StackPanel x:Name="TransfersPanel" Margin="0,8,0,0" Visibility="{Binding HasItems, Converter={StaticResource BoolVis}}">
+                    <DockPanel Margin="0,0,0,4">
+                        <ui:Button DockPanel.Dock="Right" Content="Limpar" Appearance="Transparent" Padding="6,1" FontSize="11" Command="{Binding ClearFinishedCommand}" />
+                        <ui:Button DockPanel.Dock="Right" Content="Retomar tudo" Appearance="Transparent" Padding="6,1" FontSize="11" Command="{Binding ResumeAllCommand}"
+                                   Visibility="{Binding IsPaused, Converter={StaticResource BoolVis}}" />
+                        <ui:Button DockPanel.Dock="Right" Content="Pausar tudo" Appearance="Transparent" Padding="6,1" FontSize="11" Command="{Binding PauseAllCommand}"
+                                   Visibility="{Binding IsPaused, Converter={StaticResource InverseBoolVis}}" />
+                        <TextBlock Text="Transferências" Foreground="{DynamicResource RdTextDim}" FontSize="11" VerticalAlignment="Center" />
+                    </DockPanel>
+                    <ItemsControl ItemsSource="{Binding Items}" MaxHeight="190">
+                        <ItemsControl.Template>
+                            <ControlTemplate TargetType="ItemsControl">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <ItemsPresenter />
+                                </ScrollViewer>
+                            </ControlTemplate>
+                        </ItemsControl.Template>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type services:TransferItem}">
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="16" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Text="{Binding DirectionGlyph}" Foreground="{DynamicResource RdAccent}" FontWeight="Bold" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontSize="12" />
+                                    <StackPanel Grid.Column="2" Grid.RowSpan="2" Orientation="Horizontal" VerticalAlignment="Top">
+                                        <ui:Button Icon="{ui:SymbolIcon Pause16}" Appearance="Transparent" Padding="3" MinWidth="0"
+                                                   ToolTip="Pausar (o download continua de onde parou)" Command="{Binding PauseCommand}" Visibility="{Binding CanPause, Converter={StaticResource BoolVis}}" />
+                                        <ui:Button Icon="{ui:SymbolIcon Play16}" Appearance="Transparent" Padding="3" MinWidth="0"
+                                                   ToolTip="Retomar" Command="{Binding ResumeCommand}" Visibility="{Binding CanResume, Converter={StaticResource BoolVis}}" />
+                                        <ui:Button Icon="{ui:SymbolIcon Dismiss16}" Appearance="Transparent" Padding="3" MinWidth="0"
+                                                   ToolTip="Cancelar" Command="{Binding CancelCommand}" Visibility="{Binding CanPause, Converter={StaticResource BoolVis}}" />
+                                    </StackPanel>
+                                    <ProgressBar Grid.Row="1" Grid.Column="1" Height="3" Minimum="0" Maximum="100" Value="{Binding Percent, Mode=OneWay}" Margin="0,3,0,2" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Detail}" Foreground="{DynamicResource RdTextDim}" FontSize="10.5" TextTrimming="CharacterEllipsis" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Lista -->
+            <Grid>
+                <ListBox x:Name="List" FocusVisualStyle="{x:Null}"
+                         ItemsSource="{Binding Entries}"
+                         SelectionMode="Extended"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Padding="4,0"
+                         AllowDrop="True"
+                         VirtualizingPanel.IsVirtualizing="True"
+                         VirtualizingPanel.VirtualizationMode="Recycling"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         KeyDown="OnListKeyDown"
+                         PreviewMouseRightButtonDown="OnListRightClick"
+                         DragOver="OnDragOver"
+                         Drop="OnDrop">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource RdListItem}">
+                            <Setter Property="Padding" Value="6,0" />
+                            <Setter Property="Margin" Value="0" />
+                            <Setter Property="MinHeight" Value="0" />
+                            <Setter Property="Height" Value="26" />
+                            <!-- Dois cliques no próprio item: pasta entra, arquivo abre no editor -->
+                            <EventSetter Event="MouseDoubleClick" Handler="OnItemDoubleClick" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="{x:Type remote:RemoteEntryViewModel}">
+                            <Grid ToolTip="{Binding ToolTip}" Opacity="{Binding Opacity}" Background="Transparent">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <!-- Ícone do tipo (como no VS Code); o símbolo simples só aparece se os ícones não carregarem -->
+                                <Grid Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center">
+                                    <Image Source="{Binding IconImage}" Width="16" Height="16" />
+                                    <ui:SymbolIcon Symbol="{Binding Icon}" Filled="{Binding IsDirectory}" Foreground="{Binding IconBrush}" FontSize="16"
+                                                   Visibility="{Binding GlyphVisibility}" />
+                                    <Border Visibility="{Binding LinkVisibility}" Width="9" Height="9" CornerRadius="2" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                            Margin="0,0,-3,-2" Background="{DynamicResource RdSurface}" ToolTip="Link simbólico">
+                                        <ui:SymbolIcon Symbol="Link12" FontSize="8" Foreground="{DynamicResource RdAccent}" />
+                                    </Border>
+                                </Grid>
+                                <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" FontSize="13" />
+                                <TextBlock Grid.Column="2" Text="{Binding SizeText}" Foreground="{DynamicResource RdTextDim}" FontSize="11" Margin="8,0,0,0" VerticalAlignment="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <ui:ProgressRing IsIndeterminate="True" Width="22" Height="22" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,10,0"
+                                 Visibility="{Binding IsBusy, Converter={StaticResource BoolVis}}" />
+
+                <!-- Conectando / erro / desconectado -->
+                <Border Background="{DynamicResource RdSurface}" Visibility="{Binding State, Converter={StaticResource StateIs}, ConverterParameter=Connecting|Error|Idle}">
+                    <StackPanel VerticalAlignment="Center" Margin="20">
+                        <ui:ProgressRing IsIndeterminate="True" Width="28" Height="28" HorizontalAlignment="Center"
+                                         Visibility="{Binding State, Converter={StaticResource StateIs}, ConverterParameter=Connecting}" />
+                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" TextAlignment="Center" Margin="0,12,0,0" Foreground="{DynamicResource RdTextDim}" />
+                        <ui:Button Content="Tentar de novo" HorizontalAlignment="Center" Margin="0,12,0,0" Click="OnRetry"
+                                   Visibility="{Binding State, Converter={StaticResource StateIs}, ConverterParameter=Error}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </DockPanel>
+    </Grid>
+</UserControl>

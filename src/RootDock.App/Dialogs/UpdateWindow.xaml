@@ -1,0 +1,83 @@
+<ui:FluentWindow x:Class="RootDock.App.Dialogs.UpdateWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="Atualizações do RootDock"
+                 Width="580" SizeToContent="Height" ResizeMode="NoResize"
+                 WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="None"
+                 ShowInTaskbar="False"
+                 Background="{DynamicResource RdSurface}">
+    <StackPanel>
+        <ui:TitleBar Title="Atualizações do RootDock" ShowMinimize="False" ShowMaximize="False" />
+        <StackPanel Margin="24,4,24,20">
+            <!-- Situação atual: ícone + título + detalhe -->
+            <DockPanel>
+                <Border Width="46" Height="46" CornerRadius="23" Margin="0,0,16,0" VerticalAlignment="Top"
+                        Background="{DynamicResource RdPanel}" BorderBrush="{DynamicResource RdBorder}" BorderThickness="1">
+                    <Grid>
+                        <ui:SymbolIcon x:Name="StatusIcon" Symbol="ArrowSync24" FontSize="24"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <ui:ProgressRing x:Name="StatusRing" IsIndeterminate="True" Width="26" Height="26"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
+                    </Grid>
+                </Border>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="TitleText" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock x:Name="DetailText" Foreground="{DynamicResource RdTextDim}" TextWrapping="Wrap" Margin="0,4,0,0" LineHeight="19" />
+                </StackPanel>
+            </DockPanel>
+
+            <ProgressBar x:Name="DownloadBar" Height="4" Margin="62,12,0,0" Maximum="100" Visibility="Collapsed" />
+
+            <!-- Novidades da versão nova -->
+            <Border x:Name="NotesPanel" Margin="0,18,0,0" Padding="14,10" Visibility="Collapsed"
+                    Background="{DynamicResource RdPanel}" BorderBrush="{DynamicResource RdBorder}" BorderThickness="1" CornerRadius="8">
+                <StackPanel>
+                    <TextBlock x:Name="NotesTitle" Text="Novidades" FontWeight="SemiBold" Margin="0,0,0,6" />
+                    <ScrollViewer MaxHeight="230" VerticalScrollBarVisibility="Auto">
+                        <TextBlock x:Name="NotesText" TextWrapping="Wrap" LineHeight="20" Foreground="{DynamicResource RdText}" />
+                    </ScrollViewer>
+                </StackPanel>
+            </Border>
+
+            <Border Margin="0,18,0,0" Padding="14,10" Background="{DynamicResource RdPanel}" BorderBrush="{DynamicResource RdBorder}" BorderThickness="1" CornerRadius="8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="Versão instalada" Foreground="{DynamicResource RdTextDim}" Margin="0,3" />
+                    <TextBlock x:Name="CurrentText" Grid.Column="1" Margin="0,3" FontFamily="Cascadia Mono, Consolas" FontSize="12" VerticalAlignment="Center" />
+                    <TextBlock Grid.Row="1" Text="Origem" Foreground="{DynamicResource RdTextDim}" Margin="0,3" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,3" FontFamily="Cascadia Mono, Consolas" FontSize="12" VerticalAlignment="Center">
+                        <Hyperlink x:Name="SourceLink" Click="OnOpenReleases" ToolTip="Abrir as versões publicadas no GitHub">
+                            <Run x:Name="SourceText" />
+                        </Hyperlink>
+                    </TextBlock>
+                    <TextBlock Grid.Row="2" Text="Última verificação" Foreground="{DynamicResource RdTextDim}" Margin="0,3" />
+                    <TextBlock x:Name="LastCheckText" Grid.Row="2" Grid.Column="1" Margin="0,3" VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+
+            <CheckBox x:Name="AutoBox" Margin="0,16,0,0" Content="Baixar e instalar atualizações automaticamente"
+                      Checked="OnAutoChanged" Unchecked="OnAutoChanged" />
+            <TextBlock x:Name="AutoHint" Margin="28,2,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource RdTextDim}"
+                       Text="O RootDock procura versões novas ao abrir e a cada 6 horas e baixa em segundo plano. A instalação acontece quando você fecha o programa; nenhuma conexão é interrompida." />
+
+            <DockPanel Margin="0,22,0,0" LastChildFill="False">
+                <ui:Button x:Name="CheckButton" Content="Verificar agora" Icon="{ui:SymbolIcon ArrowSync20}" Click="OnCheck" />
+                <ui:Button x:Name="ReleasesButton" Content="Abrir página de versões" Icon="{ui:SymbolIcon Open20}" Click="OnOpenReleases" Visibility="Collapsed" />
+                <ui:Button DockPanel.Dock="Right" Content="Fechar" IsCancel="True" Click="OnClose" MinWidth="96" Margin="8,0,0,0" />
+                <ui:Button x:Name="RestartButton" DockPanel.Dock="Right" Content="Reiniciar e atualizar" Appearance="Primary"
+                           Icon="{ui:SymbolIcon ArrowClockwise20}" Click="OnRestart" Visibility="Collapsed" />
+            </DockPanel>
+        </StackPanel>
+    </StackPanel>
+</ui:FluentWindow>

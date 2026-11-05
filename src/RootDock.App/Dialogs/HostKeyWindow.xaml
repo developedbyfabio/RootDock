@@ -1,0 +1,46 @@
+<ui:FluentWindow x:Class="RootDock.App.Dialogs.HostKeyWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="Chave do servidor"
+                 Width="560"
+                 SizeToContent="Height"
+                 ResizeMode="NoResize"
+                 WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="None"
+                 ShowInTaskbar="False"
+                 Background="{DynamicResource RdSurface}">
+    <StackPanel>
+        <ui:TitleBar Title="Chave do servidor" ShowMaximize="False" ShowMinimize="False" />
+        <Border x:Name="WarningBar" Height="3" Background="{DynamicResource RdStaging}" />
+        <StackPanel Margin="24,14,24,20">
+            <TextBlock x:Name="HeaderText" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
+            <TextBlock x:Name="BodyText" Margin="0,8,0,14" Foreground="{DynamicResource RdTextDim}" TextWrapping="Wrap" />
+
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock Text="Servidor" Margin="0,0,16,6" Foreground="{DynamicResource RdTextDim}" />
+                <TextBlock x:Name="HostText" Grid.Column="1" Margin="0,0,0,6" />
+                <TextBlock Grid.Row="1" Text="Tipo da chave" Margin="0,0,16,6" Foreground="{DynamicResource RdTextDim}" />
+                <TextBlock x:Name="KeyTypeText" Grid.Row="1" Grid.Column="1" Margin="0,0,0,6" />
+                <TextBlock Grid.Row="2" Text="Impressão digital" Margin="0,0,16,0" Foreground="{DynamicResource RdTextDim}" />
+                <TextBox x:Name="FingerprintText" Grid.Row="2" Grid.Column="1" IsReadOnly="True" FontFamily="Cascadia Mono, Consolas" />
+            </Grid>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,22,0,0">
+                <ui:Button Content="Cancelar" IsCancel="True" IsDefault="True" Margin="0,0,8,0" MinWidth="96" Click="OnCancel" />
+                <ui:Button x:Name="OnceButton" Content="Só desta vez" Margin="0,0,8,0" MinWidth="110" Click="OnOnce" />
+                <ui:Button x:Name="TrustButton" Content="Confiar e salvar" Appearance="Primary" MinWidth="130" Click="OnTrust" />
+            </StackPanel>
+        </StackPanel>
+    </StackPanel>
+</ui:FluentWindow>

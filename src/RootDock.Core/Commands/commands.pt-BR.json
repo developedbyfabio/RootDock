@@ -1,0 +1,294 @@
+{
+  "categories": [
+    {
+      "id": "basico",
+      "name": "Primeiros passos",
+      "icon": "Lightbulb20",
+      "description": "Para se localizar no servidor: onde você está, o que tem na pasta e como andar entre pastas.",
+      "commands": [
+        { "id": "basico.pwd", "title": "Onde estou?", "cmd": "pwd", "description": "Mostra o caminho completo da pasta em que o terminal está agora.", "tags": ["pasta atual", "caminho", "diretorio"] },
+        { "id": "basico.ls", "title": "Listar arquivos da pasta", "cmd": "ls -lah", "description": "Lista tudo na pasta atual, inclusive arquivos ocultos, com tamanho legível, dono, permissões e data.", "tags": ["listar", "arquivos", "dir"] },
+        { "id": "basico.home", "title": "Ir para a pasta pessoal", "cmd": "cd ~", "description": "Volta para a sua pasta inicial (home).", "tags": ["home", "inicio"] },
+        { "id": "basico.up", "title": "Voltar uma pasta", "cmd": "cd ..", "description": "Sobe um nível, para a pasta que contém a atual.", "tags": ["subir", "voltar"] },
+        { "id": "basico.cd", "title": "Ir para uma pasta", "cmd": "cd {{pasta}}", "description": "Entra na pasta informada.", "params": [{ "name": "pasta", "label": "Pasta", "placeholder": "/var/www" }], "tags": ["entrar", "navegar"] },
+        { "id": "basico.clear", "title": "Limpar a tela", "cmd": "clear", "description": "Apaga o que está visível no terminal (o histórico de rolagem continua).", "tags": ["limpar", "cls"] },
+        { "id": "basico.history", "title": "Últimos comandos digitados", "cmd": "history | tail -n 50", "description": "Os 50 comandos mais recentes desta conta, numerados.", "tags": ["historico"] },
+        { "id": "basico.find", "title": "Procurar arquivo pelo nome", "cmd": "find {{pasta}} -iname {{nome}} 2>/dev/null | head -n 50", "description": "Procura arquivos e pastas pelo nome (sem diferenciar maiúsculas). Use * como coringa.", "params": [{ "name": "pasta", "label": "Procurar em", "default": "." }, { "name": "nome", "label": "Nome ou padrão", "placeholder": "*.log" }], "tags": ["buscar", "localizar", "achar"] },
+        { "id": "basico.man", "title": "Manual de um comando", "cmd": "man {{comando}}", "description": "Abre a documentação completa de um comando.", "tip": "Setas rolam, / procura, q sai.", "params": [{ "name": "comando", "label": "Comando", "placeholder": "ls" }], "tags": ["ajuda", "help", "documentacao"] }
+      ]
+    },
+    {
+      "id": "disco",
+      "name": "Disco e espaço",
+      "icon": "HardDrive20",
+      "description": "Quanto espaço tem, o que está ocupando e onde estão os arquivos grandes.",
+      "commands": [
+        { "id": "disco.df", "title": "Espaço livre nos discos", "cmd": "df -hT -x tmpfs -x devtmpfs -x squashfs -x overlay", "description": "Tamanho, uso e espaço livre de cada disco/partição, em GB e MB.", "tags": ["espaco", "hd", "cheio", "livre", "disco"] },
+        { "id": "disco.here", "title": "Tamanho das pastas aqui", "cmd": "du -sh -- * .[^.]* 2>/dev/null | sort -h", "description": "Tamanho de cada item da pasta atual, do menor para o maior.", "tags": ["ocupando", "tamanho", "pastas"] },
+        { "id": "disco.dir", "title": "Tamanho de uma pasta", "cmd": "du -sh {{pasta}}", "description": "Quanto espaço uma pasta ocupa no total.", "params": [{ "name": "pasta", "label": "Pasta", "default": "/var/log" }], "tags": ["tamanho"] },
+        { "id": "disco.biggest-dirs", "title": "Maiores pastas de uma pasta", "cmd": "du -xh --max-depth=1 {{pasta}} 2>/dev/null | sort -h | tail -n 20", "description": "As 20 maiores subpastas de uma pasta, sem atravessar para outros discos.", "tip": "Como root você vê tudo; como usuário comum, só o que tem permissão.", "params": [{ "name": "pasta", "label": "Pasta", "default": "/" }], "tags": ["maiores", "ocupando", "cheio"] },
+        { "id": "disco.big-files", "title": "Arquivos maiores que 100 MB", "cmd": "find {{pasta}} -xdev -type f -size +100M -exec ls -lh {} + 2>/dev/null | sort -k5 -h | tail -n 20", "description": "Lista os arquivos grandes, do menor para o maior. Bom para achar o que está enchendo o disco.", "params": [{ "name": "pasta", "label": "Procurar em", "default": "/" }], "tags": ["grandes", "pesados", "cheio"] },
+        { "id": "disco.inodes", "title": "Quantidade de arquivos (inodes)", "cmd": "df -ih -x tmpfs -x devtmpfs -x squashfs -x overlay", "description": "Um disco pode \"encher\" por excesso de arquivos pequenos mesmo com GB livres. Aqui você vê esse limite.", "tags": ["inode", "cheio"] },
+        { "id": "disco.lsblk", "title": "Discos e partições", "cmd": "lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT", "description": "Todos os discos físicos e partições, com tamanho e onde estão montados.", "tags": ["particao", "montagem"] },
+        { "id": "disco.journal", "title": "Espaço usado pelos logs do sistema", "cmd": "journalctl --disk-usage", "description": "Quanto o journal (logs do systemd) está ocupando.", "tags": ["logs", "journal"] }
+      ]
+    },
+    {
+      "id": "memoria",
+      "name": "Memória e CPU",
+      "icon": "Gauge20",
+      "description": "Uso de memória, processador e carga do servidor.",
+      "commands": [
+        { "id": "memoria.free", "title": "Memória livre", "cmd": "free -h", "description": "Memória total, usada e disponível (inclui swap). Olhe a coluna \"available\".", "tags": ["ram", "memoria", "swap"] },
+        { "id": "memoria.top", "title": "Monitor de processos (top)", "cmd": "top", "description": "Tela ao vivo com os processos que mais consomem.", "tip": "Shift+M ordena por memória, Shift+P por CPU, q sai.", "tags": ["monitor", "processos", "lento"] },
+        { "id": "memoria.htop", "title": "Monitor colorido (htop)", "cmd": "htop", "description": "Versão mais amigável do top, com barras coloridas e mouse.", "tip": "F10 ou q sai. Se não existir: sudo apt install htop.", "tags": ["monitor", "processos"] },
+        { "id": "memoria.uptime", "title": "Carga e tempo ligado", "cmd": "uptime", "description": "Há quanto tempo está ligado e a carga média (1, 5 e 15 minutos). Carga maior que o número de núcleos indica sobrecarga.", "tags": ["carga", "load"] },
+        { "id": "memoria.top-mem", "title": "Processos que mais usam memória", "cmd": "ps aux --sort=-%mem | head -n 15", "description": "Os 15 processos que mais ocupam RAM agora.", "tags": ["ram", "pesado"] },
+        { "id": "memoria.top-cpu", "title": "Processos que mais usam CPU", "cmd": "ps aux --sort=-%cpu | head -n 15", "description": "Os 15 processos que mais usam o processador agora.", "tags": ["cpu", "lento", "pesado"] },
+        { "id": "memoria.lscpu", "title": "Informações do processador", "cmd": "lscpu | head -n 20", "description": "Modelo, núcleos, threads e frequência do processador.", "tags": ["cpu", "processador"] },
+        { "id": "memoria.nproc", "title": "Quantos núcleos", "cmd": "nproc", "description": "Número de núcleos disponíveis (útil para comparar com a carga).", "tags": ["cpu", "cores"] },
+        { "id": "memoria.vmstat", "title": "Estatísticas a cada segundo", "cmd": "vmstat 1 5", "description": "Cinco leituras de memória, swap, disco e CPU, uma por segundo.", "tags": ["desempenho", "io"] }
+      ]
+    },
+    {
+      "id": "processos",
+      "name": "Processos",
+      "icon": "Apps20",
+      "description": "Encontrar programas em execução e encerrar os travados.",
+      "commands": [
+        { "id": "processos.grep", "title": "Procurar processo pelo nome", "cmd": "ps aux | grep -i {{nome}} | grep -v grep", "description": "Mostra os processos cujo nome ou comando contém o texto.", "params": [{ "name": "nome", "label": "Nome", "placeholder": "nginx" }], "tags": ["encontrar", "rodando"] },
+        { "id": "processos.tree", "title": "Árvore de processos", "cmd": "ps -ef --forest | tail -n 60", "description": "Processos organizados por quem iniciou quem.", "tags": ["pai", "filhos"] },
+        { "id": "processos.port", "title": "Qual programa usa uma porta", "cmd": "sudo ss -tulpn | grep :{{porta}}", "description": "Mostra qual processo está ouvindo na porta informada.", "sudo": true, "params": [{ "name": "porta", "label": "Porta", "placeholder": "8080", "type": "number" }], "tags": ["porta", "ocupada"] },
+        { "id": "processos.kill", "title": "Encerrar processo", "cmd": "kill {{pid}}", "description": "Pede para o processo terminar normalmente (ele pode salvar o que estava fazendo).", "risk": "caution", "params": [{ "name": "pid", "label": "PID (número do processo)", "placeholder": "1234", "type": "number" }], "tags": ["matar", "parar", "travado"] },
+        { "id": "processos.kill9", "title": "Forçar encerramento", "cmd": "kill -9 {{pid}}", "description": "Encerra na hora, sem dar chance de salvar. Use só se \"Encerrar processo\" não funcionou.", "risk": "caution", "params": [{ "name": "pid", "label": "PID (número do processo)", "placeholder": "1234", "type": "number" }], "tags": ["matar", "travado", "forcar"] }
+      ]
+    },
+    {
+      "id": "servicos",
+      "name": "Serviços",
+      "icon": "Settings20",
+      "description": "Programas que rodam em segundo plano (nginx, mysql, docker...), controlados pelo systemd.",
+      "commands": [
+        { "id": "servicos.running", "title": "Serviços rodando", "cmd": "systemctl list-units --type=service --state=running --no-pager", "description": "Todos os serviços ativos neste momento.", "tags": ["ativos", "systemd"] },
+        { "id": "servicos.failed", "title": "Serviços com falha", "cmd": "systemctl --failed --no-pager", "description": "Serviços que tentaram iniciar e falharam. Primeiro lugar para olhar quando algo parou.", "tags": ["erro", "parado", "falha"] },
+        { "id": "servicos.status", "title": "Situação de um serviço", "cmd": "systemctl status {{servico}} --no-pager", "description": "Se está rodando, desde quando, e as últimas linhas de log.", "params": [{ "name": "servico", "label": "Serviço", "placeholder": "nginx" }], "tags": ["status", "rodando"] },
+        { "id": "servicos.logs", "title": "Últimos logs de um serviço", "cmd": "journalctl -u {{servico}} -n 100 --no-pager", "description": "As 100 últimas mensagens registradas pelo serviço.", "params": [{ "name": "servico", "label": "Serviço", "placeholder": "nginx" }], "tags": ["log", "erro"] },
+        { "id": "servicos.follow", "title": "Logs de um serviço ao vivo", "cmd": "journalctl -u {{servico}} -f", "description": "Mostra novas mensagens assim que aparecem.", "tip": "Ctrl+C para parar de acompanhar.", "params": [{ "name": "servico", "label": "Serviço", "placeholder": "nginx" }], "tags": ["log", "acompanhar"] },
+        { "id": "servicos.restart", "title": "Reiniciar serviço", "cmd": "sudo systemctl restart {{servico}}", "description": "Para e inicia de novo. O serviço fica fora do ar por alguns segundos.", "risk": "caution", "sudo": true, "params": [{ "name": "servico", "label": "Serviço", "placeholder": "nginx" }], "tags": ["restart", "reiniciar"] },
+        { "id": "servicos.reload", "title": "Recarregar configuração", "cmd": "sudo systemctl reload {{servico}}", "description": "Aplica mudanças de configuração sem derrubar o serviço (quando ele suporta).", "risk": "caution", "sudo": true, "params": [{ "name": "servico", "label": "Serviço", "placeholder": "nginx" }], "tags": ["reload", "config"] },
+        { "id": "servicos.start", "title": "Iniciar serviço", "cmd": "sudo systemctl start {{servico}}", "description": "Liga um serviço que está parado.", "risk": "caution", "sudo": true, "params": [{ "name": "servico", "label": "Serviço", "placeholder": "nginx" }], "tags": ["ligar", "start"] },
+        { "id": "servicos.stop", "title": "Parar serviço", "cmd": "sudo systemctl stop {{servico}}", "description": "Desliga o serviço. O que depende dele para de funcionar.", "risk": "caution", "sudo": true, "params": [{ "name": "servico", "label": "Serviço", "placeholder": "nginx" }], "tags": ["desligar", "stop"] },
+        { "id": "servicos.enable", "title": "Iniciar junto com o servidor", "cmd": "sudo systemctl enable {{servico}}", "description": "Faz o serviço ligar sozinho quando o servidor reiniciar.", "risk": "caution", "sudo": true, "params": [{ "name": "servico", "label": "Serviço", "placeholder": "nginx" }], "tags": ["boot", "automatico"] }
+      ]
+    },
+    {
+      "id": "logs",
+      "name": "Logs",
+      "icon": "DocumentText20",
+      "description": "Onde o sistema e os programas registram o que aconteceu (e os erros).",
+      "commands": [
+        { "id": "logs.system", "title": "Últimas mensagens do sistema", "cmd": "journalctl -n 100 --no-pager", "description": "As 100 mensagens mais recentes de todo o sistema.", "tags": ["syslog", "sistema"] },
+        { "id": "logs.errors", "title": "Erros desde que ligou", "cmd": "journalctl -p err -b --no-pager | tail -n 50", "description": "Somente mensagens de erro desde o último reinício.", "tags": ["erro", "falha"] },
+        { "id": "logs.follow", "title": "Acompanhar um log ao vivo", "cmd": "tail -f {{arquivo}}", "description": "Mostra novas linhas do arquivo assim que são gravadas.", "tip": "Ctrl+C para parar.", "params": [{ "name": "arquivo", "label": "Arquivo", "default": "/var/log/syslog" }], "tags": ["acompanhar", "tempo real"] },
+        { "id": "logs.tail", "title": "Últimas linhas de um arquivo", "cmd": "tail -n {{linhas}} {{arquivo}}", "description": "Mostra o final do arquivo, onde ficam os registros mais novos.", "params": [{ "name": "linhas", "label": "Linhas", "default": "100", "type": "number" }, { "name": "arquivo", "label": "Arquivo", "default": "/var/log/syslog" }], "tags": ["final"] },
+        { "id": "logs.grep", "title": "Procurar texto em um log", "cmd": "grep -i {{texto}} {{arquivo}} | tail -n 50", "description": "As 50 últimas linhas que contêm o texto (sem diferenciar maiúsculas).", "params": [{ "name": "texto", "label": "Texto", "placeholder": "error" }, { "name": "arquivo", "label": "Arquivo", "default": "/var/log/syslog" }], "tags": ["buscar", "filtrar"] },
+        { "id": "logs.dmesg", "title": "Mensagens do kernel", "cmd": "sudo dmesg -T | tail -n 50", "description": "Problemas de hardware, disco, memória e rede costumam aparecer aqui.", "sudo": true, "tags": ["kernel", "hardware"] },
+        { "id": "logs.last", "title": "Últimos logins", "cmd": "last -n 20", "description": "Quem entrou no servidor, de onde e por quanto tempo.", "tags": ["acessos", "login"] }
+      ]
+    },
+    {
+      "id": "rede",
+      "name": "Rede",
+      "icon": "Globe20",
+      "description": "Endereços, portas, conexões e testes para saber se algo responde.",
+      "commands": [
+        { "id": "rede.ip", "title": "Endereços IP desta máquina", "cmd": "ip -brief address", "description": "Cada interface de rede e seus IPs.", "tags": ["ip", "endereco"] },
+        { "id": "rede.public", "title": "IP público", "cmd": "curl -s https://ifconfig.me; echo", "description": "O endereço com que este servidor aparece na internet.", "tags": ["ip externo", "internet"] },
+        { "id": "rede.ports", "title": "Portas abertas", "cmd": "sudo ss -tulpn", "description": "Portas em que algum programa está esperando conexões, e qual programa.", "sudo": true, "tags": ["portas", "escutando", "listen"] },
+        { "id": "rede.ping", "title": "Testar se um servidor responde", "cmd": "ping -c 4 {{host}}", "description": "Envia 4 pacotes e mostra o tempo de resposta.", "params": [{ "name": "host", "label": "Servidor ou IP", "placeholder": "8.8.8.8" }], "tags": ["ping", "conectividade"] },
+        { "id": "rede.port", "title": "Testar porta de outro servidor", "cmd": "nc -zv -w 3 {{host}} {{porta}}", "description": "Diz se a porta está acessível a partir deste servidor.", "params": [{ "name": "host", "label": "Servidor ou IP", "placeholder": "10.0.0.5" }, { "name": "porta", "label": "Porta", "placeholder": "3306", "type": "number" }], "tags": ["telnet", "porta", "firewall"] },
+        { "id": "rede.dns", "title": "Descobrir o IP de um domínio", "cmd": "getent hosts {{dominio}}", "description": "Consulta o DNS como os programas do servidor fazem.", "params": [{ "name": "dominio", "label": "Domínio", "placeholder": "google.com" }], "tags": ["dns", "nslookup"] },
+        { "id": "rede.http", "title": "Testar um site (cabeçalhos)", "cmd": "curl -sI {{url}}", "description": "Mostra o código HTTP (200, 301, 500...) e os cabeçalhos.", "params": [{ "name": "url", "label": "Endereço", "placeholder": "https://exemplo.com.br" }], "tags": ["site", "http", "status"] },
+        { "id": "rede.routes", "title": "Rotas de rede", "cmd": "ip route", "description": "Por onde o tráfego sai (gateway padrão e redes conhecidas).", "tags": ["gateway", "rota"] },
+        { "id": "rede.established", "title": "Conexões ativas", "cmd": "ss -tn state established | head -n 30", "description": "Conexões TCP abertas agora (de onde e para onde).", "tags": ["conexoes"] },
+        { "id": "rede.trace", "title": "Caminho até um servidor", "cmd": "tracepath {{host}}", "description": "Mostra cada salto da rede até o destino; ajuda a ver onde a conexão para.", "params": [{ "name": "host", "label": "Servidor ou IP", "placeholder": "8.8.8.8" }], "tags": ["traceroute"] }
+      ]
+    },
+    {
+      "id": "usuarios",
+      "name": "Usuários e permissões",
+      "icon": "Person20",
+      "description": "Quem está usando o servidor e quem pode mexer em cada arquivo.",
+      "commands": [
+        { "id": "usuarios.whoami", "title": "Quem sou eu", "cmd": "whoami && id", "description": "Seu usuário e os grupos a que pertence.", "tags": ["usuario", "grupo"] },
+        { "id": "usuarios.who", "title": "Quem está conectado", "cmd": "w", "description": "Usuários com sessão aberta agora e o que estão fazendo.", "tags": ["logados", "online"] },
+        { "id": "usuarios.sudo", "title": "O que posso fazer como administrador", "cmd": "sudo -l", "description": "Lista o que seu usuário pode executar com sudo.", "tags": ["sudo", "permissao"] },
+        { "id": "usuarios.ls", "title": "Permissões de um arquivo", "cmd": "ls -l {{arquivo}}", "description": "Dono, grupo e permissões (r=ler, w=escrever, x=executar).", "params": [{ "name": "arquivo", "label": "Arquivo ou pasta", "placeholder": "/var/www/index.php" }], "tags": ["chmod", "dono"] },
+        { "id": "usuarios.chmod", "title": "Mudar permissão", "cmd": "chmod {{modo}} {{arquivo}}", "description": "644 = dono lê e escreve, outros só leem. 755 = idem, e todos executam (pastas e scripts).", "risk": "caution", "params": [{ "name": "modo", "label": "Permissão", "default": "644", "type": "number" }, { "name": "arquivo", "label": "Arquivo ou pasta", "placeholder": "script.sh" }], "tags": ["chmod", "permissao"] },
+        { "id": "usuarios.chown", "title": "Mudar dono", "cmd": "sudo chown {{dono}} {{arquivo}}", "description": "Troca o dono (e o grupo) de um arquivo ou pasta.", "risk": "caution", "sudo": true, "params": [{ "name": "dono", "label": "Usuário:grupo", "default": "www-data:www-data" }, { "name": "arquivo", "label": "Arquivo ou pasta", "placeholder": "/var/www/site" }], "tags": ["chown", "dono"] },
+        { "id": "usuarios.root", "title": "Virar administrador (root)", "cmd": "sudo -i", "description": "Abre um shell como root. Tudo a seguir roda com poder total: cuidado.", "tip": "Digite exit para voltar ao seu usuário.", "risk": "caution", "sudo": true, "tags": ["root", "admin"] },
+        { "id": "usuarios.list", "title": "Usuários do sistema", "cmd": "cut -d: -f1 /etc/passwd", "description": "Todas as contas existentes (muitas são de serviços, não de pessoas).", "tags": ["contas"] }
+      ]
+    },
+    {
+      "id": "pacotes",
+      "name": "Programas e atualizações",
+      "icon": "Box20",
+      "description": "Instalar, procurar e atualizar programas (Ubuntu/Debian, apt).",
+      "commands": [
+        { "id": "pacotes.upgradable", "title": "Atualizações disponíveis", "cmd": "apt list --upgradable 2>/dev/null", "description": "Programas que têm versão nova esperando para instalar.", "tags": ["update", "atualizar"] },
+        { "id": "pacotes.update", "title": "Atualizar a lista de programas", "cmd": "sudo apt update", "description": "Baixa a lista de versões mais recente. Não instala nada.", "sudo": true, "tags": ["update"] },
+        { "id": "pacotes.upgrade", "title": "Instalar atualizações", "cmd": "sudo apt upgrade", "description": "Atualiza os programas instalados. Em produção, faça numa janela de manutenção.", "risk": "caution", "sudo": true, "tags": ["upgrade", "atualizar"] },
+        { "id": "pacotes.search", "title": "Procurar programa", "cmd": "apt search {{termo}}", "description": "Procura pacotes pelo nome ou descrição.", "params": [{ "name": "termo", "label": "Termo", "placeholder": "htop" }], "tags": ["buscar", "instalar"] },
+        { "id": "pacotes.show", "title": "Detalhes de um programa", "cmd": "apt show {{pacote}}", "description": "Versão, tamanho e descrição de um pacote.", "params": [{ "name": "pacote", "label": "Pacote", "placeholder": "nginx" }], "tags": ["info", "versao"] },
+        { "id": "pacotes.installed", "title": "Programa está instalado?", "cmd": "dpkg -l | grep -i {{pacote}}", "description": "Mostra se o pacote (ou parecidos) está instalado e a versão.", "params": [{ "name": "pacote", "label": "Pacote", "placeholder": "nginx" }], "tags": ["instalado", "versao"] },
+        { "id": "pacotes.install", "title": "Instalar um programa", "cmd": "sudo apt install {{pacote}}", "description": "Instala o pacote e o que ele precisa. Confirme com Y quando perguntar.", "risk": "caution", "sudo": true, "params": [{ "name": "pacote", "label": "Pacote", "placeholder": "htop" }], "tags": ["install", "instalar"] }
+      ]
+    },
+    {
+      "id": "arquivos",
+      "name": "Arquivos e textos",
+      "icon": "Folder20",
+      "description": "Ler, procurar, copiar e compactar arquivos.",
+      "commands": [
+        { "id": "arquivos.cat", "title": "Ver conteúdo de um arquivo", "cmd": "cat {{arquivo}}", "description": "Mostra o arquivo inteiro no terminal (bom para arquivos pequenos).", "params": [{ "name": "arquivo", "label": "Arquivo", "placeholder": "/etc/hostname" }], "tags": ["ler", "abrir"] },
+        { "id": "arquivos.less", "title": "Ler arquivo com rolagem", "cmd": "less {{arquivo}}", "description": "Abre o arquivo para ler com calma, sem alterar.", "tip": "Setas rolam, / procura, q sai.", "params": [{ "name": "arquivo", "label": "Arquivo", "placeholder": "/var/log/syslog" }], "tags": ["ler", "paginar"] },
+        { "id": "arquivos.nano", "title": "Editar arquivo (nano)", "cmd": "nano {{arquivo}}", "description": "Editor simples dentro do terminal.", "tip": "Ctrl+O salva, Ctrl+X sai. Ou dê duplo clique no arquivo no painel Arquivos para editar no VS Code.", "params": [{ "name": "arquivo", "label": "Arquivo", "placeholder": "/etc/hosts" }], "tags": ["editar", "editor"] },
+        { "id": "arquivos.grep", "title": "Procurar texto dentro dos arquivos", "cmd": "grep -rn --color=always {{texto}} {{pasta}} | head -n 50", "description": "Procura o texto em todos os arquivos da pasta (e subpastas), mostrando arquivo e linha.", "params": [{ "name": "texto", "label": "Texto", "placeholder": "DB_HOST" }, { "name": "pasta", "label": "Pasta", "default": "." }], "tags": ["buscar", "conteudo"] },
+        { "id": "arquivos.wc", "title": "Contar linhas", "cmd": "wc -l {{arquivo}}", "description": "Quantas linhas o arquivo tem.", "params": [{ "name": "arquivo", "label": "Arquivo", "placeholder": "lista.txt" }], "tags": ["linhas"] },
+        { "id": "arquivos.size", "title": "Tamanho de um arquivo", "cmd": "ls -lh {{arquivo}}", "description": "Tamanho legível e data de modificação.", "params": [{ "name": "arquivo", "label": "Arquivo", "placeholder": "backup.sql" }], "tags": ["tamanho"] },
+        { "id": "arquivos.diff", "title": "Comparar dois arquivos", "cmd": "diff -u {{arquivo1}} {{arquivo2}}", "description": "Mostra as linhas diferentes entre os dois (- removido, + adicionado).", "params": [{ "name": "arquivo1", "label": "Primeiro arquivo", "placeholder": "config.antigo" }, { "name": "arquivo2", "label": "Segundo arquivo", "placeholder": "config.novo" }], "tags": ["comparar", "diferenca"] },
+        { "id": "arquivos.mkdir", "title": "Criar pasta", "cmd": "mkdir -p {{pasta}}", "description": "Cria a pasta (e as pastas acima dela, se faltarem).", "params": [{ "name": "pasta", "label": "Pasta", "placeholder": "backups/2026" }], "tags": ["nova pasta"] },
+        { "id": "arquivos.cp", "title": "Copiar arquivo ou pasta", "cmd": "cp -ri {{origem}} {{destino}}", "description": "Copia mantendo o original. Pergunta antes de substituir algo que já existe.", "risk": "caution", "params": [{ "name": "origem", "label": "Origem", "placeholder": "site" }, { "name": "destino", "label": "Destino", "placeholder": "site-copia" }], "tags": ["copiar", "duplicar"] },
+        { "id": "arquivos.mv", "title": "Mover ou renomear", "cmd": "mv -i {{origem}} {{destino}}", "description": "Move ou muda o nome. Pergunta antes de substituir algo que já existe.", "risk": "caution", "params": [{ "name": "origem", "label": "Origem", "placeholder": "antigo.txt" }, { "name": "destino", "label": "Destino", "placeholder": "novo.txt" }], "tags": ["mover", "renomear"] },
+        { "id": "arquivos.targz", "title": "Compactar pasta (.tar.gz)", "cmd": "tar -czf {{arquivo}} {{pasta}}", "description": "Cria um arquivo compactado com a pasta inteira.", "risk": "caution", "params": [{ "name": "arquivo", "label": "Arquivo a criar", "placeholder": "backup-site.tar.gz" }, { "name": "pasta", "label": "Pasta", "placeholder": "site" }], "tags": ["compactar", "zip", "backup"] },
+        { "id": "arquivos.tarlist", "title": "Ver o que tem num .tar.gz", "cmd": "tar -tzf {{arquivo}} | head -n 50", "description": "Lista o conteúdo sem extrair.", "params": [{ "name": "arquivo", "label": "Arquivo", "placeholder": "backup.tar.gz" }], "tags": ["listar", "compactado"] },
+        { "id": "arquivos.untar", "title": "Extrair .tar.gz aqui", "cmd": "tar -xzf {{arquivo}}", "description": "Extrai na pasta atual. Arquivos com o mesmo nome são substituídos.", "risk": "caution", "params": [{ "name": "arquivo", "label": "Arquivo", "placeholder": "backup.tar.gz" }], "tags": ["extrair", "descompactar"] }
+      ]
+    },
+    {
+      "id": "tmux",
+      "name": "tmux (sessões que não caem)",
+      "icon": "WindowConsole20",
+      "description": "O tmux mantém seus comandos rodando mesmo se a conexão cair ou você fechar o RootDock. Os atalhos começam com Ctrl+B; os itens marcados como atalho enviam as teclas por você.",
+      "commands": [
+        { "id": "tmux.new", "title": "Nova sessão com nome", "cmd": "tmux new -s {{nome}}", "description": "Abre uma sessão tmux. Rode comandos demorados aqui dentro.", "params": [{ "name": "nome", "label": "Nome da sessão", "default": "trabalho" }], "tags": ["criar", "sessao"] },
+        { "id": "tmux.ls", "title": "Listar sessões", "cmd": "tmux ls", "description": "Sessões tmux abertas neste servidor.", "tags": ["listar"] },
+        { "id": "tmux.attach", "title": "Voltar para uma sessão", "cmd": "tmux attach -t {{nome}}", "description": "Reconecta a uma sessão que ficou rodando.", "params": [{ "name": "nome", "label": "Nome da sessão", "default": "trabalho" }], "tags": ["reconectar", "attach"] },
+        { "id": "tmux.attach-last", "title": "Voltar para a última sessão", "cmd": "tmux attach", "description": "Reconecta à sessão usada mais recentemente.", "tags": ["reconectar"] },
+        { "id": "tmux.detach", "title": "Sair e deixar rodando", "cmd": "\u0002d", "keys": true, "keysLabel": "Ctrl+B  D", "description": "Desanexa: você sai do tmux e tudo continua rodando no servidor.", "tags": ["detach", "desanexar"] },
+        { "id": "tmux.split-v", "title": "Dividir ao lado", "cmd": "\u0002%", "keys": true, "keysLabel": "Ctrl+B  %", "description": "Divide o painel atual em dois, lado a lado.", "tags": ["dividir", "painel"] },
+        { "id": "tmux.split-h", "title": "Dividir embaixo", "cmd": "\u0002\"", "keys": true, "keysLabel": "Ctrl+B  \"", "description": "Divide o painel atual em dois, um em cima do outro.", "tags": ["dividir", "painel"] },
+        { "id": "tmux.next-pane", "title": "Ir para o próximo painel", "cmd": "\u0002o", "keys": true, "keysLabel": "Ctrl+B  O", "description": "Alterna entre os painéis da janela.", "tags": ["painel", "trocar"] },
+        { "id": "tmux.zoom", "title": "Ampliar/restaurar painel", "cmd": "\u0002z", "keys": true, "keysLabel": "Ctrl+B  Z", "description": "O painel atual ocupa a tela toda; repita para voltar.", "tags": ["zoom", "maximizar"] },
+        { "id": "tmux.new-window", "title": "Nova janela", "cmd": "\u0002c", "keys": true, "keysLabel": "Ctrl+B  C", "description": "Cria uma janela (como uma aba) dentro da sessão.", "tags": ["janela", "aba"] },
+        { "id": "tmux.next-window", "title": "Próxima janela", "cmd": "\u0002n", "keys": true, "keysLabel": "Ctrl+B  N", "description": "Vai para a próxima janela da sessão.", "tags": ["janela", "trocar"] },
+        { "id": "tmux.windows", "title": "Escolher janela ou sessão", "cmd": "\u0002w", "keys": true, "keysLabel": "Ctrl+B  W", "description": "Lista janelas e sessões para escolher com as setas e Enter.", "tags": ["listar", "janela"] },
+        { "id": "tmux.scroll", "title": "Rolar o histórico", "cmd": "\u0002[", "keys": true, "keysLabel": "Ctrl+B  [", "description": "Entra no modo de rolagem para ler o que passou.", "tip": "Setas ou PageUp/PageDown rolam; q sai.", "tags": ["rolar", "historico"] },
+        { "id": "tmux.kill", "title": "Encerrar uma sessão", "cmd": "tmux kill-session -t {{nome}}", "description": "Fecha a sessão e para tudo que roda dentro dela.", "risk": "caution", "params": [{ "name": "nome", "label": "Nome da sessão", "placeholder": "trabalho" }], "tags": ["fechar", "encerrar"] }
+      ]
+    },
+    {
+      "id": "docker",
+      "name": "Docker",
+      "icon": "Cube20",
+      "description": "Containers: ver o que está rodando, logs, consumo e entrar no container.",
+      "commands": [
+        { "id": "docker.ps", "title": "Containers rodando", "cmd": "docker ps", "description": "Containers ativos, imagem, portas e há quanto tempo estão de pé.", "tags": ["containers", "rodando"] },
+        { "id": "docker.ps-a", "title": "Todos os containers", "cmd": "docker ps -a", "description": "Inclui os parados (veja a coluna STATUS para o motivo).", "tags": ["parados"] },
+        { "id": "docker.stats", "title": "Consumo dos containers", "cmd": "docker stats --no-stream", "description": "CPU, memória e rede de cada container agora.", "tags": ["cpu", "memoria"] },
+        { "id": "docker.logs", "title": "Logs de um container", "cmd": "docker logs --tail 100 {{container}}", "description": "As 100 últimas linhas que o container escreveu.", "params": [{ "name": "container", "label": "Container (nome ou ID)", "placeholder": "app" }], "tags": ["log", "erro"] },
+        { "id": "docker.logs-f", "title": "Logs de um container ao vivo", "cmd": "docker logs -f --tail 50 {{container}}", "description": "Acompanha o log em tempo real.", "tip": "Ctrl+C para parar de acompanhar (o container continua).", "params": [{ "name": "container", "label": "Container (nome ou ID)", "placeholder": "app" }], "tags": ["log", "acompanhar"] },
+        { "id": "docker.exec", "title": "Entrar no container", "cmd": "docker exec -it {{container}} sh", "description": "Abre um terminal dentro do container.", "tip": "exit para sair. Troque sh por bash se o container tiver bash.", "params": [{ "name": "container", "label": "Container (nome ou ID)", "placeholder": "app" }], "tags": ["shell", "entrar"] },
+        { "id": "docker.images", "title": "Imagens", "cmd": "docker images", "description": "Imagens baixadas e o tamanho de cada uma.", "tags": ["imagens"] },
+        { "id": "docker.df", "title": "Espaço usado pelo Docker", "cmd": "docker system df", "description": "Quanto imagens, containers e volumes ocupam no disco.", "tags": ["espaco", "disco"] },
+        { "id": "docker.inspect", "title": "Detalhes de um container", "cmd": "docker inspect {{container}} | less", "description": "Configuração completa: variáveis, volumes, rede, portas.", "tip": "q para sair.", "params": [{ "name": "container", "label": "Container (nome ou ID)", "placeholder": "app" }], "tags": ["config", "inspecionar"] },
+        { "id": "docker.restart", "title": "Reiniciar container", "cmd": "docker restart {{container}}", "description": "Para e inicia o container de novo.", "risk": "caution", "params": [{ "name": "container", "label": "Container (nome ou ID)", "placeholder": "app" }], "tags": ["restart"] },
+        { "id": "docker.compose-ps", "title": "Compose: situação", "cmd": "docker compose ps", "description": "Serviços do docker-compose desta pasta e se estão de pé.", "tip": "Rode na pasta onde está o docker-compose.yml.", "tags": ["compose", "status"] },
+        { "id": "docker.compose-logs", "title": "Compose: logs ao vivo", "cmd": "docker compose logs -f --tail 100", "description": "Logs de todos os serviços do compose desta pasta.", "tip": "Ctrl+C para parar de acompanhar.", "tags": ["compose", "log"] },
+        { "id": "docker.compose-up", "title": "Compose: subir ou atualizar", "cmd": "docker compose up -d", "description": "Cria ou recria os containers conforme o docker-compose.yml e deixa rodando em segundo plano.", "risk": "caution", "tags": ["compose", "subir", "deploy"] },
+        { "id": "docker.compose-stop", "title": "Compose: parar", "cmd": "docker compose stop", "description": "Para os containers do compose sem removê-los.", "risk": "caution", "tags": ["compose", "parar"] }
+      ]
+    },
+    {
+      "id": "git",
+      "name": "Git",
+      "icon": "BranchFork20",
+      "description": "Consultar o repositório: o que mudou, histórico e branches. Comandos que reescrevem histórico não estão aqui de propósito.",
+      "commands": [
+        { "id": "git.status", "title": "O que mudou", "cmd": "git status", "description": "Arquivos alterados, novos e prontos para commit.", "tags": ["status", "mudancas"] },
+        { "id": "git.log", "title": "Histórico recente", "cmd": "git log --oneline --graph --decorate -n 20", "description": "Os 20 commits mais recentes, com branches.", "tags": ["log", "commits"] },
+        { "id": "git.branch", "title": "Branches", "cmd": "git branch -a", "description": "Branches locais e remotas; a atual tem *.", "tags": ["branch", "ramo"] },
+        { "id": "git.diff", "title": "Resumo das alterações", "cmd": "git diff --stat", "description": "Quais arquivos mudaram e quantas linhas.", "tags": ["diff"] },
+        { "id": "git.remote", "title": "Repositórios remotos", "cmd": "git remote -v", "description": "Para onde o repositório envia e de onde baixa.", "tags": ["origin", "remoto"] },
+        { "id": "git.fetch", "title": "Buscar novidades (sem aplicar)", "cmd": "git fetch --all --prune", "description": "Baixa informações do servidor sem mexer nos seus arquivos.", "tags": ["fetch", "atualizar"] },
+        { "id": "git.pull", "title": "Atualizar a branch atual", "cmd": "git pull", "description": "Baixa e aplica os commits novos da branch atual.", "risk": "caution", "tags": ["pull", "atualizar", "deploy"] },
+        { "id": "git.stash-list", "title": "Alterações guardadas (stash)", "cmd": "git stash list", "description": "Lista o que foi guardado com git stash.", "tags": ["stash"] },
+        { "id": "git.blame", "title": "Quem alterou cada linha", "cmd": "git blame {{arquivo}}", "description": "Autor e commit de cada linha do arquivo.", "params": [{ "name": "arquivo", "label": "Arquivo", "placeholder": "app/Models/User.php" }], "tags": ["autor", "blame"] }
+      ]
+    },
+    {
+      "id": "sistema",
+      "name": "Sistema",
+      "icon": "Info20",
+      "description": "Versão, hora, agendamentos e se o servidor precisa reiniciar.",
+      "commands": [
+        { "id": "sistema.os", "title": "Versão do sistema", "cmd": "cat /etc/os-release", "description": "Distribuição e versão (ex.: Ubuntu 24.04).", "tags": ["versao", "distro"] },
+        { "id": "sistema.uname", "title": "Kernel e arquitetura", "cmd": "uname -a", "description": "Versão do kernel Linux e tipo de processador.", "tags": ["kernel"] },
+        { "id": "sistema.hostnamectl", "title": "Informações da máquina", "cmd": "hostnamectl", "description": "Nome, sistema, kernel e se é máquina virtual.", "tags": ["hostname", "vm"] },
+        { "id": "sistema.time", "title": "Data, hora e fuso", "cmd": "timedatectl", "description": "Hora atual, fuso horário e se está sincronizado.", "tags": ["hora", "fuso", "ntp"] },
+        { "id": "sistema.uptime", "title": "Ligado há quanto tempo", "cmd": "uptime -p", "description": "Tempo desde o último reinício, em texto.", "tags": ["uptime"] },
+        { "id": "sistema.reboot-required", "title": "Precisa reiniciar?", "cmd": "cat /var/run/reboot-required 2>/dev/null || echo \"Nenhuma reinicialização pendente.\"", "description": "Algumas atualizações só valem depois de reiniciar; aqui você descobre se é o caso.", "tags": ["reiniciar", "reboot"] },
+        { "id": "sistema.cron", "title": "Tarefas agendadas (cron)", "cmd": "crontab -l", "description": "Tarefas que rodam automaticamente para o seu usuário.", "tags": ["agendamento", "cron"] },
+        { "id": "sistema.env", "title": "Variáveis de ambiente", "cmd": "env | sort", "description": "Configurações do ambiente do terminal (PATH, idioma...).", "tags": ["env", "path"] }
+      ]
+    },
+    {
+      "id": "seguranca",
+      "name": "Segurança",
+      "icon": "Shield20",
+      "description": "Tentativas de acesso, firewall e chaves autorizadas.",
+      "commands": [
+        { "id": "seguranca.failed", "title": "Senhas erradas no SSH", "cmd": "sudo grep -i \"failed password\" /var/log/auth.log | tail -n 20", "description": "Últimas tentativas de login com senha errada (pode indicar ataque).", "sudo": true, "tags": ["ataque", "login", "falha"] },
+        { "id": "seguranca.lastb", "title": "Logins que falharam", "cmd": "sudo lastb -n 20", "description": "Últimos acessos recusados, com usuário e origem.", "sudo": true, "tags": ["falha", "login"] },
+        { "id": "seguranca.ufw", "title": "Firewall (UFW)", "cmd": "sudo ufw status verbose", "description": "Se o firewall está ativo e quais portas libera.", "sudo": true, "tags": ["firewall", "portas"] },
+        { "id": "seguranca.fail2ban", "title": "Bloqueios do Fail2ban", "cmd": "sudo fail2ban-client status", "description": "Proteções ativas contra tentativas repetidas de acesso.", "sudo": true, "tags": ["bloqueio", "ban"] },
+        { "id": "seguranca.sudo-log", "title": "Uso recente do sudo", "cmd": "sudo grep sudo /var/log/auth.log | tail -n 20", "description": "Quem usou poderes de administrador e para quê.", "sudo": true, "tags": ["auditoria", "sudo"] },
+        { "id": "seguranca.keys", "title": "Chaves SSH autorizadas", "cmd": "cat ~/.ssh/authorized_keys", "description": "Chaves que podem entrar nesta conta sem senha.", "tags": ["chave", "ssh"] }
+      ]
+    },
+    {
+      "id": "web",
+      "name": "Nginx, Apache e PHP",
+      "icon": "Server20",
+      "description": "Servidores web: testar configuração, aplicar mudanças e ver erros.",
+      "commands": [
+        { "id": "web.nginx-test", "title": "Testar configuração do Nginx", "cmd": "sudo nginx -t", "description": "Confere se a configuração está correta antes de recarregar.", "sudo": true, "tags": ["nginx", "config"] },
+        { "id": "web.nginx-reload", "title": "Recarregar o Nginx", "cmd": "sudo nginx -t && sudo systemctl reload nginx", "description": "Testa e, se estiver tudo certo, aplica a nova configuração sem derrubar o site.", "risk": "caution", "sudo": true, "tags": ["nginx", "reload"] },
+        { "id": "web.nginx-errors", "title": "Erros do Nginx", "cmd": "sudo tail -n 100 /var/log/nginx/error.log", "description": "As 100 últimas linhas do log de erros.", "sudo": true, "tags": ["nginx", "erro", "502"] },
+        { "id": "web.nginx-access", "title": "Acessos do Nginx ao vivo", "cmd": "sudo tail -f /var/log/nginx/access.log", "description": "Cada requisição ao site, assim que acontece.", "tip": "Ctrl+C para parar.", "sudo": true, "tags": ["nginx", "acessos"] },
+        { "id": "web.nginx-sites", "title": "Sites ativos do Nginx", "cmd": "ls -l /etc/nginx/sites-enabled/", "description": "Configurações de site habilitadas.", "tags": ["nginx", "vhost"] },
+        { "id": "web.apache-test", "title": "Testar configuração do Apache", "cmd": "sudo apachectl configtest", "description": "Confere a configuração do Apache.", "sudo": true, "tags": ["apache", "config"] },
+        { "id": "web.apache-errors", "title": "Erros do Apache", "cmd": "sudo tail -n 100 /var/log/apache2/error.log", "description": "As 100 últimas linhas do log de erros do Apache.", "sudo": true, "tags": ["apache", "erro"] },
+        { "id": "web.php-v", "title": "Versão do PHP", "cmd": "php -v", "description": "Versão do PHP de linha de comando.", "tags": ["php", "versao"] },
+        { "id": "web.php-m", "title": "Extensões do PHP", "cmd": "php -m", "description": "Módulos carregados (mysqli, redis, gd...).", "tags": ["php", "modulos"] }
+      ]
+    },
+    {
+      "id": "laravel",
+      "name": "Laravel",
+      "icon": "Code20",
+      "description": "Rode na pasta do projeto. Comandos que apagam ou recriam o banco (migrate:fresh, db:wipe...) não estão aqui de propósito.",
+      "commands": [
+        { "id": "laravel.about", "title": "Versão e ambiente", "cmd": "php artisan about", "description": "Versão do Laravel e do PHP, ambiente, cache e drivers configurados.", "tags": ["versao", "env"] },
+        { "id": "laravel.routes", "title": "Rotas", "cmd": "php artisan route:list", "description": "Todas as rotas da aplicação, com método e controller.", "tags": ["rotas", "url"] },
+        { "id": "laravel.migrate-status", "title": "Situação das migrations", "cmd": "php artisan migrate:status", "description": "Quais migrations já rodaram (só consulta, não altera o banco).", "tags": ["migrations", "banco"] },
+        { "id": "laravel.failed", "title": "Jobs que falharam", "cmd": "php artisan queue:failed", "description": "Tarefas da fila que deram erro.", "tags": ["fila", "queue", "jobs"] },
+        { "id": "laravel.log-tail", "title": "Últimos erros do Laravel", "cmd": "tail -n 100 storage/logs/laravel.log", "description": "As 100 últimas linhas do log da aplicação.", "tags": ["log", "erro"] },
+        { "id": "laravel.log-follow", "title": "Log do Laravel ao vivo", "cmd": "tail -f storage/logs/laravel.log", "description": "Acompanha o log da aplicação em tempo real.", "tip": "Ctrl+C para parar.", "tags": ["log", "acompanhar"] },
+        { "id": "laravel.optimize-clear", "title": "Limpar caches", "cmd": "php artisan optimize:clear", "description": "Limpa caches de configuração, rotas, views e eventos. Útil depois de mudar o .env.", "risk": "caution", "tags": ["cache", "limpar"] },
+        { "id": "laravel.composer", "title": "Versão do Composer", "cmd": "composer --version", "description": "Versão do gerenciador de pacotes do PHP.", "tags": ["composer"] }
+      ]
+    }
+  ]
+}

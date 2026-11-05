@@ -1,0 +1,30 @@
+# Compilação
+bin/
+obj/
+publish/
+Releases/
+releases/
+*.nupkg
+
+# IDEs
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+
+# Testes
+TestResults/
+*.trx
+coverage*/
+
+# Dependências da interface web (wwwroot/vendor é gerado a partir delas e fica no repositório)
+node_modules/
+
+# Diversos
+*.log
+Thumbs.db
+Desktop.ini
+.env
+.env.*

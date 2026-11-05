@@ -1,0 +1,231 @@
+<ui:FluentWindow x:Class="RootDock.App.Dialogs.MultiExecWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="Executar em vários servidores"
+                 Width="1180" Height="780" MinWidth="920" MinHeight="580"
+                 WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="None"
+                 ShowInTaskbar="True"
+                 Background="{DynamicResource RdSurface}">
+    <ui:FluentWindow.Resources>
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+        </Style>
+        <Style x:Key="Dim" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource RdTextDim}" />
+            <Setter Property="FontSize" Value="11.5" />
+        </Style>
+    </ui:FluentWindow.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <ui:TitleBar Title="Executar em vários servidores" />
+
+        <Grid Grid.Row="1" Margin="16,4,16,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="320" MinWidth="240" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Servidores -->
+            <Border Background="{DynamicResource RdPanel}" BorderBrush="{DynamicResource RdBorder}" BorderThickness="1" CornerRadius="8" Padding="12">
+                <DockPanel>
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <TextBlock Text="Servidores" Style="{StaticResource SectionTitle}" Margin="0" VerticalAlignment="Center" />
+                        <TextBlock x:Name="SelectionText" Style="{StaticResource Dim}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </DockPanel>
+                    <ui:TextBox DockPanel.Dock="Top" x:Name="FilterBox" PlaceholderText="Filtrar: nome, IP, empresa ou #tag" Icon="{ui:SymbolIcon Search20}"
+                                TextChanged="OnFilterChanged" ClearButtonEnabled="True" />
+                    <WrapPanel DockPanel.Dock="Top" Margin="0,8,0,8">
+                        <ui:Button Content="Marcar visíveis" Padding="8,3" FontSize="12" Margin="0,0,6,0" Click="OnSelectVisible" />
+                        <ui:Button Content="Nenhum" Padding="8,3" FontSize="12" Margin="0,0,6,0" Click="OnSelectNone" />
+                        <ui:Button Content="Abertos agora" Padding="8,3" FontSize="12" Click="OnSelectOpen"
+                                   ToolTip="Marca os servidores que têm terminal conectado (a execução usa essa mesma conexão)" />
+                    </WrapPanel>
+                    <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Dim}" TextWrapping="Wrap" Margin="0,8,0,0"
+                               Text="Só sessões SSH. Usa a conexão de um terminal aberto ou o login salvo da sessão (senha no Cofre do Windows, chave ou agente). Nada é perguntado no meio da execução." />
+                    <ListBox x:Name="TargetsList" ScrollViewer.HorizontalScrollBarVisibility="Disabled" BorderThickness="0" Background="Transparent">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="4,3" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ToolTip="{Binding Tooltip}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,0,2,0" MinWidth="0" />
+                                    <Ellipse Grid.Column="1" Width="7" Height="7" Margin="2,0,8,0" Fill="{Binding EnvBrush}" VerticalAlignment="Center" />
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding Endpoint}" FontSize="11" Foreground="{DynamicResource RdTextDim}" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <Border Grid.Column="3" Background="{DynamicResource RdDevSoft}" CornerRadius="4" Padding="5,1" VerticalAlignment="Center" Margin="6,0,0,0"
+                                            Visibility="{Binding OpenVisibility}" ToolTip="Terminal conectado: usa essa conexão">
+                                        <TextBlock Text="aberto" FontSize="10.5" Foreground="{DynamicResource RdDev}" />
+                                    </Border>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- Comando, opções e resultados -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" MinHeight="120" />
+                    <RowDefinition Height="6" />
+                    <RowDefinition Height="*" MinHeight="100" />
+                </Grid.RowDefinitions>
+
+                <DockPanel Margin="0,0,0,6">
+                    <TextBlock Text="Comando" Style="{StaticResource SectionTitle}" Margin="0" VerticalAlignment="Center" />
+                    <ComboBox x:Name="HistoryBox" DockPanel.Dock="Right" Width="260" HorizontalAlignment="Right" SelectionChanged="OnHistoryPicked"
+                              ToolTip="Comandos executados antes" />
+                    <TextBlock Text="Recentes" Style="{StaticResource Dim}" DockPanel.Dock="Right" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0" />
+                </DockPanel>
+                <TextBox Grid.Row="1" x:Name="CommandBox" AcceptsReturn="True" TextWrapping="NoWrap" MinHeight="86" MaxHeight="180"
+                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                         FontFamily="Cascadia Mono, Consolas" FontSize="13" Padding="10,8" TextChanged="OnCommandChanged"
+                         ToolTip="Pode ter várias linhas (vira um script). Roda sem terminal interativo: comandos que pedem senha (sudo com senha) não funcionam." />
+
+                <!-- Opções -->
+                <WrapPanel Grid.Row="2" Margin="0,10,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="Ao mesmo tempo" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <ui:NumberBox x:Name="ConcurrencyBox" Minimum="1" Maximum="50" Value="5" Width="118" SpinButtonPlacementMode="Inline" Margin="0,0,16,0"
+                                  ToolTip="Quantos servidores executam juntos (lotes)" />
+                    <TextBlock Text="Intervalo" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <ui:NumberBox x:Name="IntervalBox" Minimum="0" Maximum="3600" Value="0" Width="118" SpinButtonPlacementMode="Inline" Margin="0,0,4,0"
+                                  ToolTip="Segundos entre o início de um servidor e o do próximo (deploy escalonado)" />
+                    <TextBlock Text="s" VerticalAlignment="Center" Margin="0,0,16,0" />
+                    <TextBlock Text="Tempo limite" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <ui:NumberBox x:Name="TimeoutBox" Minimum="5" Maximum="86400" Value="120" Width="136" SpinButtonPlacementMode="Inline" Margin="0,0,4,0"
+                                  ToolTip="Segundos: passou disso, o comando é interrompido naquele servidor" />
+                    <TextBlock Text="s" VerticalAlignment="Center" Margin="0,0,16,0" />
+                    <CheckBox x:Name="StopOnErrorBox" Content="Parar no primeiro erro" VerticalAlignment="Center"
+                              ToolTip="Se um servidor falhar, os que ainda não começaram não executam" />
+                </WrapPanel>
+
+                <StackPanel Grid.Row="3" Margin="0,10,0,10">
+                    <!-- Trava para comandos perigosos -->
+                    <Border x:Name="DangerPanel" Visibility="Collapsed" Background="{DynamicResource RdProdSoft}" BorderBrush="{DynamicResource RdProd}" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,0,0,8">
+                        <StackPanel>
+                            <TextBlock x:Name="DangerTitle" FontWeight="SemiBold" Foreground="{DynamicResource RdProd}" />
+                            <TextBlock x:Name="DangerReasons" TextWrapping="Wrap" Margin="0,4,0,8" />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Para liberar, digite " VerticalAlignment="Center" />
+                                <TextBlock Text="EXECUTAR" FontFamily="Cascadia Mono, Consolas" FontWeight="Bold" VerticalAlignment="Center" />
+                                <ui:TextBox x:Name="ConfirmBox" Width="160" Margin="10,0,0,0" TextChanged="OnConfirmChanged" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock x:Name="ProductionNote" Visibility="Collapsed" Foreground="{DynamicResource RdStaging}" TextWrapping="Wrap" Margin="0,0,0,8" />
+
+                    <DockPanel>
+                        <ui:PasswordBox x:Name="SharedPasswordBox" DockPanel.Dock="Left" Width="330" PlaceholderText="Senha (só p/ quem não tem senha salva)"
+                                        ToolTip="Usada só nesta execução, nos servidores sem senha salva e sem chave. Não é gravada." />
+                        <ui:Button x:Name="CancelRunButton" DockPanel.Dock="Right" Content="Cancelar execução" Margin="8,0,0,0" Visibility="Collapsed" Click="OnCancelRun"
+                                   Icon="{ui:SymbolIcon Stop20}" />
+                        <ui:Button x:Name="RunButton" DockPanel.Dock="Right" Appearance="Primary" MinWidth="220" Click="OnRun" Icon="{ui:SymbolIcon Play20}" />
+                        <TextBlock x:Name="RunHint" Style="{StaticResource Dim}" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="12,0,0,0" TextTrimming="CharacterEllipsis" />
+                    </DockPanel>
+                </StackPanel>
+
+                <!-- Resultados -->
+                <Border Grid.Row="4" Background="{DynamicResource RdPanel}" BorderBrush="{DynamicResource RdBorder}" BorderThickness="1" CornerRadius="8">
+                    <DockPanel>
+                        <Grid DockPanel.Dock="Top" Margin="12,8,12,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130" />
+                                <ColumnDefinition Width="2*" />
+                                <ColumnDefinition Width="70" />
+                                <ColumnDefinition Width="60" />
+                                <ColumnDefinition Width="3*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Situação" Style="{StaticResource Dim}" />
+                            <TextBlock Grid.Column="1" Text="Servidor" Style="{StaticResource Dim}" />
+                            <TextBlock Grid.Column="2" Text="Tempo" Style="{StaticResource Dim}" />
+                            <TextBlock Grid.Column="3" Text="Código" Style="{StaticResource Dim}" />
+                            <TextBlock Grid.Column="4" Text="Resultado" Style="{StaticResource Dim}" />
+                        </Grid>
+                        <TextBlock DockPanel.Dock="Bottom" x:Name="SummaryText" Margin="12,6,12,8" Style="{StaticResource Dim}" />
+                        <Grid>
+                            <ListBox x:Name="ResultsList" BorderThickness="0" Background="Transparent" SelectionChanged="OnResultSelected"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem">
+                                        <Setter Property="Padding" Value="8,4" />
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="126" />
+                                                <ColumnDefinition Width="2*" />
+                                                <ColumnDefinition Width="70" />
+                                                <ColumnDefinition Width="60" />
+                                                <ColumnDefinition Width="3*" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Ellipse Width="8" Height="8" Fill="{Binding StatusBrush}" Margin="0,0,8,0" />
+                                                <TextBlock Text="{Binding StatusText}" Foreground="{Binding StatusBrush}" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="2" Text="{Binding Duration}" Foreground="{DynamicResource RdTextDim}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="3" Text="{Binding ExitCode}" Foreground="{DynamicResource RdTextDim}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="4" Text="{Binding Summary}" TextTrimming="CharacterEllipsis" FontFamily="Cascadia Mono, Consolas" FontSize="12"
+                                                       Foreground="{DynamicResource RdTextDim}" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <TextBlock x:Name="EmptyResults" Text="Escolha os servidores à esquerda, escreva o comando e clique em Executar."
+                                       Foreground="{DynamicResource RdTextDim}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Grid>
+                    </DockPanel>
+                </Border>
+
+                <GridSplitter Grid.Row="5" Height="6" HorizontalAlignment="Stretch" Background="Transparent" ResizeDirection="Rows" />
+
+                <!-- Saída do servidor escolhido -->
+                <Border Grid.Row="6" Background="{DynamicResource RdInset}" BorderBrush="{DynamicResource RdBorder}" BorderThickness="1" CornerRadius="8">
+                    <DockPanel>
+                        <DockPanel DockPanel.Dock="Top" Margin="12,6,8,4">
+                            <TextBlock x:Name="OutputTitle" Text="Saída" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <ui:Button Content="Copiar saída" Padding="8,3" FontSize="12" Margin="0,0,6,0" Click="OnCopyOutput" />
+                                <ui:Button Content="Copiar relatório" Padding="8,3" FontSize="12" Margin="0,0,6,0" Click="OnCopyReport"
+                                           ToolTip="Resumo de todos os servidores com as saídas" />
+                                <ui:Button x:Name="LogsButton" Content="Abrir pasta dos logs" Padding="8,3" FontSize="12" Click="OnOpenLogs" IsEnabled="False"
+                                           ToolTip="Um arquivo por servidor, mais o resumo da execução" />
+                            </StackPanel>
+                        </DockPanel>
+                        <TextBox x:Name="OutputBox" IsReadOnly="True" BorderThickness="0" Background="Transparent" FontFamily="Cascadia Mono, Consolas" FontSize="12.5"
+                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Padding="12,4,12,10" />
+                    </DockPanel>
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

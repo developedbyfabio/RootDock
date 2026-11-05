@@ -1,0 +1,77 @@
+<ui:FluentWindow x:Class="RootDock.App.Dialogs.SshKeyWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="Minha chave SSH"
+                 Width="620"
+                 SizeToContent="Height"
+                 ResizeMode="NoResize"
+                 WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="None"
+                 ShowInTaskbar="False"
+                 Background="{DynamicResource RdSurface}">
+    <StackPanel>
+        <ui:TitleBar Title="Minha chave SSH" ShowMaximize="False" ShowMinimize="False" />
+        <StackPanel Margin="24,8,24,20">
+            <StackPanel Orientation="Horizontal">
+                <ui:SymbolIcon Symbol="Key20" FontSize="22" Foreground="{DynamicResource RdAccent}" VerticalAlignment="Center" />
+                <TextBlock x:Name="HeaderText" Margin="10,0,0,0" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock x:Name="IntroText" Margin="0,10,0,14" Foreground="{DynamicResource RdTextDim}" TextWrapping="Wrap" />
+
+            <!-- Chave existente -->
+            <StackPanel x:Name="KeyPanel">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="Tipo" Margin="0,0,16,6" Foreground="{DynamicResource RdTextDim}" />
+                    <TextBlock x:Name="TypeText" Grid.Column="1" Margin="0,0,0,6" />
+                    <TextBlock Grid.Row="1" Text="Arquivo" Margin="0,0,16,6" Foreground="{DynamicResource RdTextDim}" />
+                    <TextBlock x:Name="PathText" Grid.Row="1" Grid.Column="1" Margin="0,0,0,6" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Row="2" Text="Impressão digital" Margin="0,0,16,6" Foreground="{DynamicResource RdTextDim}" />
+                    <TextBlock x:Name="FingerprintText" Grid.Row="2" Grid.Column="1" Margin="0,0,0,6" FontFamily="Cascadia Mono, Consolas" />
+                </Grid>
+                <TextBlock Text="Chave pública (pode ser compartilhada)" Margin="0,8,0,4" Foreground="{DynamicResource RdTextDim}" />
+                <Border Padding="10,8" CornerRadius="6" Background="{DynamicResource RdBackground}" BorderBrush="{DynamicResource RdBorder}" BorderThickness="1">
+                    <TextBlock x:Name="PublicKeyText" TextWrapping="Wrap" FontFamily="Cascadia Mono, Consolas" FontSize="12"
+                               Foreground="{DynamicResource RdDev}" />
+                </Border>
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                    <ui:Button Content="Copiar chave pública" Icon="{ui:SymbolIcon Copy20}" Click="OnCopy" Margin="0,0,8,0" />
+                    <ui:Button Content="Abrir pasta .ssh" Icon="{ui:SymbolIcon FolderOpen20}" Click="OnOpenFolder" />
+                </StackPanel>
+                <Border Margin="0,16,0,0" Padding="12,10" CornerRadius="6" Background="{DynamicResource RdBackground}" BorderBrush="{DynamicResource RdBorder}" BorderThickness="1">
+                    <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource RdTextDim}">
+                        <Run Foreground="{DynamicResource RdText}" FontWeight="SemiBold" Text="Entrar sem senha num servidor:" />
+                        <Run Text="clique com o botão direito na sessão e escolha" />
+                        <Run Foreground="{DynamicResource RdText}" Text="Instalar minha chave SSH" /><Run Text=". A chave privada nunca sai deste computador; só a pública vai para o servidor." />
+                    </TextBlock>
+                </Border>
+            </StackPanel>
+
+            <!-- Sem chave -->
+            <StackPanel x:Name="CreatePanel">
+                <ui:Button x:Name="CreateButton" Content="Criar minha chave" Appearance="Primary" Icon="{ui:SymbolIcon Key20}" Click="OnCreate" HorizontalAlignment="Left" />
+            </StackPanel>
+
+            <!-- Agente SSH (ssh-agent do Windows / Pageant) -->
+            <TextBlock Text="Agente SSH" Margin="0,18,0,4" FontWeight="SemiBold" />
+            <TextBlock x:Name="AgentText" TextWrapping="Wrap" Foreground="{DynamicResource RdTextDim}" FontSize="12" />
+            <StackPanel x:Name="AgentKeys" Margin="0,4,0,0" />
+
+            <TextBlock x:Name="ErrorText" Margin="0,10,0,0" Foreground="{DynamicResource RdProd}" TextWrapping="Wrap" Visibility="Collapsed" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <ui:Button Content="Fechar" IsCancel="True" IsDefault="True" MinWidth="96" Click="OnClose" />
+            </StackPanel>
+        </StackPanel>
+    </StackPanel>
+</ui:FluentWindow>

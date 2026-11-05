@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <!-- Área de Trabalho Remota: o controle do Windows (ActiveX) é hospedado via Windows Forms -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>RootDock.App</RootNamespace>
+    <AssemblyName>RootDock</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Ícone do executável (Explorer, atalhos, barra de tarefas) -->
+    <ApplicationIcon>Assets/rootdock.ico</ApplicationIcon>
+    <!-- Main próprio (Program.cs): o Velopack roda antes do WPF -->
+    <StartupObject>RootDock.App.Program</StartupObject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="WPF-UI" />
+    <PackageReference Include="Velopack" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Os nomes do Windows Forms (MessageBox, Button, Application...) não entram como globais -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\RootDock.Core\RootDock.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Ícone da janela e da barra de título, gerados de icone.png (rootdock.ico tem de 16 a 256 px) -->
+    <Resource Include="Assets/rootdock.ico" />
+    <Resource Include="Assets/rootdock-64.png" />
+    <None Include="Assets/rootdock-256.png" />
+    <!-- Ícones de arquivo e pasta do Material Icon Theme (MIT), gerados por web/build-file-icons.mjs -->
+    <EmbeddedResource Include="Assets/FileIcons/file-icons.json" LogicalName="RootDock.FileIcons.json" />
+    <None Include="Assets/FileIcons/LICENSE-material-icon-theme.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Interface do terminal (xterm.js) servida localmente pelo WebView2 -->
+    <Content Include="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
