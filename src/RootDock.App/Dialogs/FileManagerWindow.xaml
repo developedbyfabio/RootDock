@@ -167,10 +167,16 @@
                     </StackPanel>
                 </DockPanel>
                 <Grid>
-                    <ItemsControl x:Name="QueueList">
+                    <ItemsControl x:Name="QueueList"
+                                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
                         <ItemsControl.Template>
                             <ControlTemplate TargetType="ItemsControl">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" CanContentScroll="True">
                                     <ItemsPresenter />
                                 </ScrollViewer>
                             </ControlTemplate>

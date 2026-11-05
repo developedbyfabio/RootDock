@@ -71,6 +71,31 @@ public sealed class SshConfigImporterTests : IDisposable
     }
 
     [Fact]
+    public void Negated_patterns_exclude_the_host()
+    {
+        // "Host * !bastion": as opções valem para todos, menos o bastion (como no ssh).
+        var config = Path.Combine(_dir, "config");
+        File.WriteAllText(config, """
+            Host bastion
+                HostName 203.0.113.10
+
+            Host app
+                HostName 10.0.0.30
+
+            Host * !bastion
+                User deploy
+                ProxyJump bastion
+            """);
+
+        var byName = SshConfigImporter.Import(config).Sessions.ToDictionary(s => s.Name);
+
+        Assert.Equal("deploy", byName["app"].Username);
+        Assert.Equal(byName["bastion"].Id, byName["app"].JumpSessionId);
+        Assert.NotEqual("deploy", byName["bastion"].Username);
+        Assert.Null(byName["bastion"].JumpSessionId); // sem isso o bastion apontaria para si mesmo
+    }
+
+    [Fact]
     public void MissingKey_IsWarned()
     {
         var config = Path.Combine(_dir, "config");

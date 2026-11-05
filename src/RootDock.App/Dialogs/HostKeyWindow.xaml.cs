@@ -38,6 +38,18 @@ public partial class HostKeyWindow : FluentWindow
             dialog.TrustButton.Content = "Aceitar a nova chave";
             dialog.OnceButton.Visibility = Visibility.Collapsed;
         }
+        else if (check.Status == HostKeyStatus.OtherKeyType)
+        {
+            var known = string.Join(", ", check.KnownKeyTypes ?? []);
+            dialog.WarningBar.Background = (System.Windows.Media.Brush)dialog.FindResource("RdStaging");
+            dialog.HeaderText.Text = "Atenção: o servidor apresentou outro tipo de chave";
+            dialog.BodyText.Text =
+                $"O RootDock conhece este servidor pela chave {known}, mas agora ele apresentou só uma chave {check.KeyType}. " +
+                "Isso acontece quando o servidor ganha um tipo de chave novo, mas também pode ser alguém interceptando a conexão. " +
+                "Confira a impressão digital com o responsável pelo servidor antes de confiar." +
+                (check.Source is null ? "" : $"\n\nChave conhecida registrada em: {check.Source}");
+            dialog.TrustButton.Content = "Confiar nesta chave";
+        }
         else
         {
             dialog.HeaderText.Text = "Primeira conexão com este servidor";

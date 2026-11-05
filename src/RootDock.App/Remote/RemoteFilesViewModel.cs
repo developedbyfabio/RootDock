@@ -105,7 +105,10 @@ public sealed partial class RemoteFilesViewModel : ObservableObject, IDisposable
 
     public SessionEntry Session { get; }
 
-    public ObservableCollection<RemoteEntryViewModel> Entries { get; } = [];
+    public BulkObservableCollection<RemoteEntryViewModel> Entries { get; } = [];
+
+    /// <summary>Linhas já montadas da pasta atual (filtrar reaproveita em vez de recriar).</summary>
+    private readonly Dictionary<RemoteEntry, RemoteEntryViewModel> _rows = new(ReferenceEqualityComparer.Instance);
 
     [ObservableProperty] private FilesState _state = FilesState.Idle;
     [ObservableProperty] private string _message = "";
@@ -241,6 +244,7 @@ public sealed partial class RemoteFilesViewModel : ObservableObject, IDisposable
             }
 
             _all = items.ToList();
+            _rows.Clear();
             CurrentPath = path;
             PathInput = path;
             ApplyFilter();
@@ -453,6 +457,12 @@ public sealed partial class RemoteFilesViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _disposed = true;
+        if (_pendingRefresh is { } pending)
+        {
+            _transfers.Completed -= pending;
+            _pendingRefresh = null;
+        }
+
         _listCts?.Cancel();
         _fs?.Dispose();
         _fs = null;
@@ -537,11 +547,16 @@ public sealed partial class RemoteFilesViewModel : ObservableObject, IDisposable
             .ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        Entries.Clear();
-        foreach (var entry in visible)
+        Entries.ReplaceAll(visible.Select(entry =>
         {
-            Entries.Add(new RemoteEntryViewModel(entry));
-        }
+            if (!_rows.TryGetValue(entry, out var row))
+            {
+                row = new RemoteEntryViewModel(entry);
+                _rows[entry] = row;
+            }
+
+            return row;
+        }));
 
         var dirs = visible.Count(e => e.IsDirectory);
         var files = visible.Count - dirs;
@@ -553,20 +568,37 @@ public sealed partial class RemoteFilesViewModel : ObservableObject, IDisposable
     {
         void Handler(TransferItem item)
         {
+            if (_disposed)
+            {
+                // Aba fechada com envio na fila: solta o painel (e a sessão presa por ele) já.
+                _transfers.Completed -= Handler;
+                _pendingRefresh = null;
+                return;
+            }
+
             if (_transfers.Items.Any(i => i.IsActive && i.IsUpload))
             {
                 return;
             }
 
             _transfers.Completed -= Handler;
+            _pendingRefresh = null;
             if (directory == CurrentPath)
             {
                 _ = RefreshAsync();
             }
         }
 
+        if (_pendingRefresh is { } old)
+        {
+            _transfers.Completed -= old; // um por vez: vários envios seguidos não empilham inscrições
+        }
+
+        _pendingRefresh = Handler;
         _transfers.Completed += Handler;
     }
+
+    private Action<TransferItem>? _pendingRefresh;
 
     private static async Task EnsureRemoteDirectoryAsync(RemoteFileSystem fs, string path, CancellationToken ct)
     {

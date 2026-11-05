@@ -161,10 +161,13 @@ public sealed class TerminalWorkspace
     /// <summary>Abas de Área de Trabalho Remota.</summary>
     public Rdp.RdpService? Rdp { get; set; }
 
-    public async Task InitializeAsync(string userDataFolder, int fontSize)
+    /// <param name="environment">Ambiente já em criação (começa na abertura do app, em paralelo com a janela).</param>
+    /// <param name="bootTheme">Tema aplicado já na criação do documento (sem piscar a paleta padrão antes).</param>
+    public async Task InitializeAsync(Task<CoreWebView2Environment> environment, int fontSize, object? bootTheme = null)
     {
-        var environment = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
-        await _webView.EnsureCoreWebView2Async(environment);
+        RootDock.App.Services.StartupTrace.Mark("controle WebView2");
+        await _webView.EnsureCoreWebView2Async(await environment);
+        RootDock.App.Services.StartupTrace.Mark("WebView2 pronto");
         var core = _webView.CoreWebView2;
 
         var settings = core.Settings;
@@ -181,6 +184,16 @@ public sealed class TerminalWorkspace
 #else
         settings.AreDevToolsEnabled = false;
 #endif
+
+        if (bootTheme is not null)
+        {
+            // Cores do tema antes do primeiro desenho da página: sem isso, quem usa o tema claro via a
+            // paleta escura padrão por um instante a cada abertura (o tema só chegava depois do "ready").
+            var json = JsonSerializer.Serialize(bootTheme);
+            await core.AddScriptToExecuteOnDocumentCreatedAsync(
+                "window.__bootTheme=" + json + ";(function(m){var r=document.documentElement;var v=m.vars||{};" +
+                "for(var k in v){r.style.setProperty(k,v[k]);}})(window.__bootTheme);");
+        }
 
         var root = Path.Combine(AppContext.BaseDirectory, "wwwroot");
         core.SetVirtualHostNameToFolderMapping(VirtualHost, root, CoreWebView2HostResourceAccessKind.Deny);
@@ -199,8 +212,9 @@ public sealed class TerminalWorkspace
             e.Handled = true;
             OpenExternal(e.Uri);
         };
-        core.ProcessFailed += (_, e) => Log.Info($"WebView2 processo falhou: {e.ProcessFailedKind}");
+        core.ProcessFailed += OnProcessFailed;
 
+        CurrentFontSize = fontSize;
         _queued.Insert(0, JsonSerializer.Serialize(new { type = "settings", fontSize }));
         core.Navigate($"https://{VirtualHost}/index.html");
     }
@@ -233,6 +247,58 @@ public sealed class TerminalWorkspace
         _webView.Focus();
         SessionsChanged?.Invoke();
         return session;
+    }
+
+    /// <summary>A página foi recarregada depois de uma falha: abas de editor, RDP e VNC precisam ser descartadas.</summary>
+    public event Action? PageReloaded;
+
+    private bool _recovering;
+
+    /// <summary>Tamanho de fonte atual dos terminais (para reabrir a página igual).</summary>
+    public int CurrentFontSize { get; private set; } = 14;
+
+    /// <summary>
+    /// Processo de desenho do WebView2 caiu (falta de memória, driver de vídeo) ou travou: recarrega a
+    /// página. As conexões continuam vivas no C#; os terminais voltam como abas quando ela ficar pronta.
+    /// </summary>
+    private void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
+    {
+        Log.Info($"WebView2 processo falhou: {e.ProcessFailedKind} ({e.Reason}, código {e.ExitCode})");
+        if (e.ProcessFailedKind is not (CoreWebView2ProcessFailedKind.RenderProcessExited or CoreWebView2ProcessFailedKind.RenderProcessUnresponsive))
+        {
+            return; // GPU e utilitários o próprio WebView2 reinicia; o navegador inteiro não tem volta aqui
+        }
+
+        _ready = false;
+        _recovering = true;
+        _queued.Clear();
+        foreach (var session in _sessions.Values)
+        {
+            session.ResetFlow(); // o que estava a caminho se perdeu; nada pode ficar esperando "resume"
+        }
+
+        try
+        {
+            _webView.CoreWebView2?.Reload();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Recarregar a página após falha", ex);
+        }
+    }
+
+    private void ReopenAfterReload()
+    {
+        Post(JsonSerializer.Serialize(new { type = "settings", fontSize = CurrentFontSize }));
+        foreach (var session in _sessions.Values.ToList())
+        {
+            Post(JsonSerializer.Serialize(new { type = "open", id = session.Id, title = session.Entry.Name, env = session.Entry.Environment.ToString(), splitOf = (string?)null, dir = "v" }));
+            session.WriteNotice("A área dos terminais foi recarregada após uma falha do WebView2. A conexão continua; o histórico anterior da tela se perdeu.");
+            NotifyState(session);
+        }
+
+        PageReloaded?.Invoke();
+        SessionsChanged?.Invoke();
     }
 
     public void CloseAll()
@@ -428,7 +494,21 @@ public sealed class TerminalWorkspace
             if (text.Length > 0 && _sessions.ContainsKey(session.Id))
             {
                 session.Recorder?.Output(text);
-                Post("o" + session.Id + text);
+
+                // Lotes grandes (UI ocupada durante saída intensa) vão em partes: uma mensagem gigante
+                // custa cópias enormes no processo do navegador e chega de uma vez ao xterm.
+                const int slice = 1 << 20;
+                if (text.Length <= slice)
+                {
+                    Post("o" + session.Id + text);
+                }
+                else
+                {
+                    for (var i = 0; i < text.Length; i += slice)
+                    {
+                        Post(string.Concat("o", session.Id, text.AsSpan(i, Math.Min(slice, text.Length - i))));
+                    }
+                }
             }
         }
     }
@@ -504,6 +584,13 @@ public sealed class TerminalWorkspace
         {
             case "ready":
                 _ready = true;
+                RootDock.App.Services.StartupTrace.Complete("página pronta");
+                if (_recovering)
+                {
+                    _recovering = false;
+                    ReopenAfterReload();
+                }
+
                 foreach (var queued in _queued)
                 {
                     _webView.CoreWebView2.PostWebMessageAsString(queued);
@@ -677,10 +764,19 @@ public sealed class TerminalWorkspace
                 session?.ResumeOutput();
                 break;
 
+            case "ack":
+                session?.Acknowledge(msg.GetProperty("n").GetInt64());
+                break;
+
             case "activeChanged":
                 // Aba de editor ativa: vale o terminal dono do arquivo (status, comandos).
                 ActivePaneId = id;
                 ActiveSession = session ?? (id is not null ? Editors?.OwnerOf(id, _sessions.Values) : null);
+                foreach (var each in _sessions.Values)
+                {
+                    each.SetMonitorActive(each == ActiveSession);
+                }
+
                 ActiveSessionChanged?.Invoke(ActiveSession);
                 break;
 
@@ -706,7 +802,8 @@ public sealed class TerminalWorkspace
                 break;
 
             case "fontSize":
-                FontSizeChanged?.Invoke(msg.GetProperty("size").GetInt32());
+                CurrentFontSize = msg.GetProperty("size").GetInt32();
+                FontSizeChanged?.Invoke(CurrentFontSize);
                 break;
 
             case "openUrl":

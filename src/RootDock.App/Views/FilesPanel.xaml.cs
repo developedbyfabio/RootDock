@@ -197,11 +197,11 @@ public partial class FilesPanel : UserControl
                 break;
             case Key.C when ctrl && Selected.Count > 0:
                 e.Handled = true;
-                Clipboard.SetText(string.Join(Environment.NewLine, Selected.Select(s => s.Entry.FullPath)));
+                SafeClipboard.SetText(string.Join(Environment.NewLine, Selected.Select(s => s.Entry.FullPath)));
                 break;
-            case Key.V when ctrl && Clipboard.ContainsFileDropList():
+            case Key.V when ctrl && SafeClipboard.GetFileDropList() is { Count: > 0 } files:
                 e.Handled = true;
-                await UploadAsync(Clipboard.GetFileDropList().Cast<string>().ToList(), vm.CurrentPath);
+                await UploadAsync(files.ToList(), vm.CurrentPath);
                 break;
         }
     }
@@ -313,7 +313,7 @@ public partial class FilesPanel : UserControl
         {
             menu.Items.Add(Menu("Baixar para Downloads", () => Download(selected, DownloadsFolder())));
             menu.Items.Add(Menu("Baixar para...", () => DownloadTo(selected)));
-            menu.Items.Add(Menu("Copiar caminho", () => Clipboard.SetText(string.Join(Environment.NewLine, selected.Select(s => s.Entry.FullPath))), "Ctrl+C"));
+            menu.Items.Add(Menu("Copiar caminho", () => SafeClipboard.SetText(string.Join(Environment.NewLine, selected.Select(s => s.Entry.FullPath))), "Ctrl+C"));
             if (selected.Count == 1)
             {
                 menu.Items.Add(Menu("Renomear...", () => _ = RenameAsync(selected[0]), "F2"));

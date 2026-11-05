@@ -16,9 +16,13 @@ function applyAppTheme(msg) {
   body.classList.toggle('fx-scanlines', !!fx.scanlines);
   body.classList.toggle('fx-glow', !!fx.glow);
   body.classList.toggle('fx-mono', !!fx.mono);
+  rain.color = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#00ff41';
   setMatrixRain(!!fx.rain);
   if (window.monaco && typeof applyEditorTheme === 'function') applyEditorTheme(window.monaco);
 }
+
+// Tema da abertura (o C# injeta na criação do documento): classes e efeitos já no carregamento.
+if (window.__bootTheme) document.addEventListener('DOMContentLoaded', () => { if (!appTheme) applyAppTheme(window.__bootTheme); });
 
 function handleThemeMessage(msg) {
   if (msg.type !== 'appTheme') return false;
@@ -27,14 +31,13 @@ function handleThemeMessage(msg) {
 }
 
 // ------------------------------------------------ Chuva do Matrix (só na tela inicial)
-const rain = { canvas: null, timer: 0, drops: [], columns: 0, size: 16 };
+const rain = { canvas: null, running: false, last: 0, drops: [], columns: 0, size: 16, color: "#00ff41" };
 const RAIN_CHARS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワン0123456789ABCDEF<>/{}$#';
 
 function setMatrixRain(on) {
   const empty = $('empty');
   if (!on) {
-    clearInterval(rain.timer);
-    rain.timer = 0;
+    rain.running = false;
     if (rain.canvas) rain.canvas.remove();
     rain.canvas = null;
     return;
@@ -46,8 +49,35 @@ function setMatrixRain(on) {
   rain.canvas.setAttribute('aria-hidden', 'true');
   empty.prepend(rain.canvas);
   rain.drops = [];
-  rain.timer = setInterval(drawRain, 55);
+  resumeRain();
 }
+
+// Laço por quadro (~18 por segundo) que PARA de vez com abas abertas ou janela oculta: um
+// setInterval continuaria acordando a página 18 vezes por segundo o dia inteiro.
+function resumeRain() {
+  if (rain.running || !rain.canvas) return;
+  rain.running = true;
+  requestAnimationFrame(rainFrame);
+}
+
+function rainFrame(t) {
+  const empty = $('empty');
+  if (!rain.canvas || empty.hidden || document.hidden) {
+    rain.running = false;
+    if (rain.canvas && empty.hidden) {
+      rain.canvas.width = rain.canvas.height = 0; // libera o bitmap enquanto não aparece
+      rain.drops = [];
+    }
+    return;
+  }
+  if (t - rain.last >= 55) {
+    rain.last = t;
+    drawRain();
+  }
+  requestAnimationFrame(rainFrame);
+}
+
+document.addEventListener('visibilitychange', () => { if (!document.hidden) resumeRain(); });
 
 function drawRain() {
   const empty = $('empty');
@@ -66,7 +96,7 @@ function drawRain() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = 'rgba(0, 0, 0, 0.09)'; // rastro que some aos poucos
   ctx.fillRect(0, 0, w, h);
-  const color = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#00ff41';
+  const color = rain.color;
   ctx.font = `${rain.size - 2}px "Cascadia Mono", Consolas, monospace`;
   for (let i = 0; i < rain.drops.length; i++) {
     const y = rain.drops[i] * rain.size;

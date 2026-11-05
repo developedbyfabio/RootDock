@@ -189,9 +189,11 @@ internal static class SshClientFactory
             {
                 var isPassword = !prompt.IsEchoed &&
                     prompt.Request.Contains("assword", StringComparison.OrdinalIgnoreCase);
+                // Cancelar (null) encerra o login: mandar resposta vazia contaria uma falha no servidor
+                // (fail2ban, bloqueio de conta). O SSH.NET repassa a exceção para quem chamou Connect.
                 prompt.Response = isPassword && credentials.Password is not null
                     ? credentials.Password
-                    : interaction.AnswerPrompt(host, e.Instruction, prompt.Request, prompt.IsEchoed) ?? "";
+                    : interaction.AnswerPrompt(host, e.Instruction, prompt.Request, prompt.IsEchoed) ?? throw new SshPromptCanceledException(prompt.Request);
             }
         };
         methods.Add(interactive);
@@ -202,10 +204,46 @@ internal static class SshClientFactory
         };
     }
 
+    /// <summary>
+    /// Coloca primeiro na negociação os algoritmos dos tipos de chave já salvos para o host (o que o
+    /// OpenSSH faz). Assim um servidor legítimo com vários tipos usa o conhecido, e só um servidor que
+    /// ofereça exclusivamente um tipo novo cai no aviso de "outro tipo de chave".
+    /// </summary>
+    internal static void PreferKnownHostKeyTypes(ConnectionInfo info, IReadOnlyList<string> knownTypes)
+    {
+        if (knownTypes.Count == 0)
+        {
+            return;
+        }
+
+        var algorithms = info.HostKeyAlgorithms;
+        var position = 0;
+        foreach (var type in knownTypes)
+        {
+            var names = new List<string>();
+            for (var i = 0; i < algorithms.Count; i++)
+            {
+                var name = algorithms.GetAt(i).Key;
+                if (name == type || name.StartsWith(type + "-cert-", StringComparison.Ordinal) ||
+                    (type == "ssh-rsa" && name.StartsWith("rsa-sha2-", StringComparison.Ordinal)))
+                {
+                    names.Add(name);
+                }
+            }
+
+            // rsa-sha2-512/256 antes de ssh-rsa (SHA-1), mantendo a ordem relativa original.
+            foreach (var name in names.OrderBy(n => n == "ssh-rsa" ? 1 : 0))
+            {
+                algorithms.SetPosition(name, position++);
+            }
+        }
+    }
+
     /// <summary>Verifica a chave do servidor; pergunta ao usuário quando é nova ou mudou.</summary>
     public static void AttachHostKeyVerification(
         BaseClient client, string host, int port, KnownHostsStore knownHosts, ISshInteraction interaction, Action onRejected)
     {
+        PreferKnownHostKeyTypes(client.ConnectionInfo, knownHosts.KnownKeyTypes(host, port));
         client.HostKeyReceived += (_, e) =>
         {
             if (!ServerResponded(client))
@@ -234,4 +272,11 @@ internal static class SshClientFactory
             }
         };
     }
+}
+
+/// <summary>A pessoa cancelou uma pergunta do servidor (ex.: código 2FA) durante o login.</summary>
+public sealed class SshPromptCanceledException(string prompt)
+    : OperationCanceledException($"Resposta cancelada para \"{prompt.Trim()}\".")
+{
+    public string Prompt { get; } = prompt.Trim();
 }

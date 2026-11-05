@@ -60,6 +60,41 @@ public sealed class StorageTests : IDisposable
     }
 
     [Fact]
+    public void Settings_survive_a_corrupted_file_using_the_backup()
+    {
+        var path = Path.Combine(_dir, "settings.json");
+        var store = new RootDock.Core.Settings.SettingsStore(path);
+        var settings = new RootDock.Core.Settings.AppSettings { FontSize = 17 };
+        settings.FavoriteCommands.Add("df");
+        store.Save(settings);
+        settings.FontSize = 18;
+        store.Save(settings); // a versão 17 vira o .bak
+
+        File.WriteAllText(path, "{ \"fontSize\": 1"); // gravação interrompida
+
+        var loaded = store.Load();
+
+        Assert.Equal(17, loaded.FontSize);
+        Assert.Equal(["df"], loaded.FavoriteCommands);
+        Assert.True(File.Exists(path + ".bad")); // o arquivo quebrado é guardado, não apagado
+    }
+
+    [Fact]
+    public void KnownHosts_key_of_another_type_is_not_treated_as_new_server()
+    {
+        // Um intermediário que ofereça só um tipo ainda não salvo não pode cair no diálogo de "servidor novo".
+        var store = new KnownHostsStore(Path.Combine(_dir, "known_hosts"));
+        store.Trust("server.local", 22, FakeKeyBlob("ssh-ed25519", 1), "ssh-ed25519");
+
+        var check = store.Check("server.local", 22, FakeKeyBlob("ecdsa-sha2-nistp256", 7), "ecdsa-sha2-nistp256");
+
+        Assert.Equal(HostKeyStatus.OtherKeyType, check.Status);
+        Assert.Equal(["ssh-ed25519"], check.KnownKeyTypes);
+        Assert.Equal(["ssh-ed25519"], store.KnownKeyTypes("server.local", 22));
+        Assert.Empty(store.KnownKeyTypes("outro.local", 22));
+    }
+
+    [Fact]
     public void KnownHosts_reads_hashed_openssh_entries()
     {
         var key = FakeKeyBlob("ssh-rsa", 3);

@@ -44,6 +44,12 @@ public sealed class AsciicastRecorder : IDisposable
 
     public void Resize(int columns, int rows) => Write("r", $"{columns}x{rows}");
 
+    /// <summary>
+    /// Sem escapar acentos e caracteres de desenho (─, │, ç): o padrão os grava como \uXXXX, dobrando
+    /// o tamanho de gravações de htop/mc. Controles (ESC etc.) continuam escapados; o JSON segue válido.
+    /// </summary>
+    private static readonly JsonSerializerOptions CastJson = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
     private void Write(string kind, string data)
     {
         if (data.Length == 0)
@@ -58,7 +64,7 @@ public sealed class AsciicastRecorder : IDisposable
                 return;
             }
 
-            var line = $"[{_clock.Elapsed.TotalSeconds.ToString("0.000000", System.Globalization.CultureInfo.InvariantCulture)}, \"{kind}\", {JsonSerializer.Serialize(data)}]";
+            var line = $"[{_clock.Elapsed.TotalSeconds.ToString("0.000000", System.Globalization.CultureInfo.InvariantCulture)}, \"{kind}\", {JsonSerializer.Serialize(data, CastJson)}]";
             _writer.WriteLine(line);
             Bytes += line.Length;
             if (Bytes % 16384 < line.Length)

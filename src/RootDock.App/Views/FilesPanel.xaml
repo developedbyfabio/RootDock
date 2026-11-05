@@ -70,7 +70,7 @@
                     <ui:Button Style="{StaticResource ToolButton}" Icon="{ui:SymbolIcon ArrowDownload20}" ToolTip="Baixar selecionados para Downloads" Click="OnDownloadToDownloads" />
                     <ui:Button Style="{StaticResource ToolButton}" Icon="{ui:SymbolIcon WindowConsole20}" ToolTip="Ir para esta pasta no terminal (cd)" Click="OnCdHere" />
                 </StackPanel>
-                <ui:TextBox x:Name="FilterBox" Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="Filtrar"
+                <ui:TextBox x:Name="FilterBox" Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged, Delay=200}" PlaceholderText="Filtrar"
                             Icon="{ui:SymbolIcon Filter20}" FontSize="12" Padding="6,4" Margin="6,0,0,0" ClearButtonEnabled="True" />
             </DockPanel>
 
@@ -89,10 +89,16 @@
                                    Visibility="{Binding IsPaused, Converter={StaticResource InverseBoolVis}}" />
                         <TextBlock Text="Transferências" Foreground="{DynamicResource RdTextDim}" FontSize="11" VerticalAlignment="Center" />
                     </DockPanel>
-                    <ItemsControl ItemsSource="{Binding Items}" MaxHeight="190">
+                    <ItemsControl ItemsSource="{Binding Items}" MaxHeight="190"
+                                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
                         <ItemsControl.Template>
                             <ControlTemplate TargetType="ItemsControl">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" CanContentScroll="True">
                                     <ItemsPresenter />
                                 </ScrollViewer>
                             </ControlTemplate>

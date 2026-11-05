@@ -9,6 +9,7 @@ const send = (msg) => host && host.postMessage(typeof msg === 'string' ? msg : J
 // Controle de fluxo: acima de HIGH caracteres pendentes no xterm, pede ao C# para pausar a leitura.
 const FLOW_HIGH = 2_000_000;
 const FLOW_LOW = 500_000;
+const ACK_STEP = 256 * 1024; // caracteres processados por confirmação ao C#
 
 const THEME = {
   background: '#11141a',
@@ -108,13 +109,18 @@ class Pane {
     term.unicode.activeVersion = '11';
 
     term.open(this.termEl);
-    this.loadWebgl();
+    gpuTouch(this);
 
     term.onData((data) => this.input(data));
     term.onBinary((data) => {
       if (this.state === 'connected') send('b' + this.id + data);
     });
-    term.onResize(({ cols, rows }) => send({ type: 'resize', id: this.id, cols, rows }));
+    // Arrastar a borda muda o tamanho a cada quadro: o servidor recebe só o último (vim/htop não
+    // redesenham dezenas de vezes por segundo e a gravação não registra cada tamanho intermediário).
+    term.onResize(() => {
+      clearTimeout(this.resizeTimer);
+      this.resizeTimer = setTimeout(() => send({ type: 'resize', id: this.id, cols: this.term.cols, rows: this.term.rows }), 120);
+    });
     term.onTitleChange((title) => {
       this.remoteTitle = title;
       this.renderHead();
@@ -216,12 +222,25 @@ class Pane {
   }
 
   loadWebgl() {
+    if (this.webgl || this.disposed) return;
     try {
       const webgl = new WebglAddon.WebglAddon();
-      webgl.onContextLoss(() => webgl.dispose()); // volta ao renderizador DOM
+      webgl.onContextLoss(() => { // volta ao renderizador DOM
+        if (this.webgl === webgl) this.webgl = null;
+        webgl.dispose();
+      });
       this.term.loadAddon(webgl);
+      this.webgl = webgl;
     } catch (err) {
       console.warn('WebGL indisponível, usando renderizador DOM', err);
+    }
+  }
+
+  unloadWebgl() {
+    const webgl = this.webgl;
+    this.webgl = null;
+    if (webgl) {
+      try { webgl.dispose(); } catch (err) { console.warn('descartar WebGL', err); }
     }
   }
 
@@ -250,16 +269,35 @@ class Pane {
 
   write(data) {
     this.pending += data.length;
-    this.term.write(data, () => {
+    try {
+      this.term.write(data, () => {
+        this.pending -= data.length;
+        this.ack(data.length);
+        if (this.paused && this.pending < FLOW_LOW) {
+          this.paused = false;
+          send({ type: 'resume', id: this.id });
+        }
+      });
+    } catch (err) {
+      // O xterm recusa dados com a fila interna cheia ("write data discarded"). Sem descontar aqui,
+      // "pending" ficaria inflado para sempre e o "resume" nunca sairia (terminal congelado).
       this.pending -= data.length;
-      if (this.paused && this.pending < FLOW_LOW) {
-        this.paused = false;
-        send({ type: 'resume', id: this.id });
-      }
-    });
+      this.ack(data.length);
+      console.warn('xterm recusou dados', err);
+    }
     if (!this.paused && this.pending > FLOW_HIGH) {
       this.paused = true;
       send({ type: 'pause', id: this.id });
+    }
+  }
+
+  // Créditos: o C# só posta mais quando sabe que o xterm processou (ver TerminalSession.Acknowledge).
+  // Confirma em blocos; com a fila vazia, a partir de 4 KB (eco de digitação não gera mensagem extra).
+  ack(chars) {
+    this.acked = (this.acked || 0) + chars;
+    if (this.acked >= ACK_STEP || (this.pending <= 0 && this.acked >= 4096)) {
+      send({ type: 'ack', id: this.id, n: this.acked });
+      this.acked = 0;
     }
   }
 
@@ -504,6 +542,8 @@ class Pane {
 
   dispose() {
     this.disposed = true;
+    clearTimeout(this.resizeTimer);
+    gpuForget(this);
     this.resizeObserver.disconnect();
     this.term.dispose();
     this.el.remove();
@@ -831,10 +871,31 @@ function chainNodes(nodes, dir) {
 // ---------------------------------------------------------------- Abas e painéis
 function updateEmptyState() {
   $('empty').hidden = tabs.length > 0;
+  if (tabs.length === 0 && typeof resumeRain === 'function') resumeRain(); // tela inicial de volta: chuva do Matrix volta
 }
 
 function layoutStage() {
   for (const t of tabs) t.layout();
+}
+
+// WebGL só nos painéis usados por último: o Chromium mantém ~16 contextos e, passando disso, derruba
+// o mais antigo (o terminal cairia de vez para o desenho por DOM, bem mais lento em saída pesada).
+// Painel escondido não desenha, então trocar para DOM enquanto ele está fora da tela não custa nada.
+const GPU_MAX = 8;
+const gpuPanes = []; // mais recente primeiro
+
+function gpuTouch(pane) {
+  if (!pane || pane.disposed || typeof pane.loadWebgl !== 'function') return; // só terminais
+  const i = gpuPanes.indexOf(pane);
+  if (i >= 0) gpuPanes.splice(i, 1);
+  gpuPanes.unshift(pane);
+  pane.loadWebgl();
+  while (gpuPanes.length > GPU_MAX) gpuPanes.pop().unloadWebgl();
+}
+
+function gpuForget(pane) {
+  const i = gpuPanes.indexOf(pane);
+  if (i >= 0) gpuPanes.splice(i, 1);
 }
 
 // Troca só o que está desenhado (usado durante um arraste); a aba ativa continua a mesma.
@@ -842,7 +903,10 @@ function showTab(tab) {
   if (shownTab === tab) return;
   shownTab = tab;
   layoutStage();
-  if (tab) requestAnimationFrame(() => tab.panes().forEach((p) => p.fitNow()));
+  if (tab) {
+    tab.panes().forEach(gpuTouch);
+    requestAnimationFrame(() => tab.panes().forEach((p) => p.fitNow()));
+  }
 }
 
 function activateTab(tab, pane) {
@@ -861,6 +925,7 @@ function activateTab(tab, pane) {
     t.renderHeader();
   }
   tab.render();
+  tab.panes().forEach(gpuTouch);
   tab.header.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   // Avisa o C# na hora (a barra de status e o painel de comandos seguem o terminal ativo).
   if (tab.activePane && tab.activePane !== before) send({ type: 'activeChanged', id: tab.activePane.id });

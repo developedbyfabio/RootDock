@@ -245,17 +245,30 @@ public sealed class RemoteFileSystem : IFileTransport
         RunAsync(ct, async token =>
         {
             var attributes = await _client.GetAttributesAsync(path, token).ConfigureAwait(false);
+            if (!attributes.IsRegularFile)
+            {
+                // /dev/zero, /dev/urandom, FIFOs...: tamanho 0 e leitura sem fim.
+                throw new IOException("Não é um arquivo comum (dispositivo, fila ou socket): não dá para abrir no editor.");
+            }
+
             if (attributes.Size > maxBytes)
             {
                 throw new IOException($"Arquivo grande demais para o editor ({attributes.Size / 1024 / 1024} MB). Baixe ou abra num programa externo.");
             }
 
+            // Lê com teto: o tamanho informado pode estar errado (arquivo crescendo, /proc etc.).
             await using var stream = await _client.OpenAsync(path, FileMode.Open, FileAccess.Read, token).ConfigureAwait(false);
             using var buffer = new MemoryStream((int)Math.Max(0, attributes.Size));
-            await stream.CopyToAsync(buffer, 1 << 16, token).ConfigureAwait(false);
-            if (buffer.Length > maxBytes)
+            var chunk = new byte[1 << 16];
+            int read;
+            while ((read = await stream.ReadAsync(chunk, token).ConfigureAwait(false)) > 0)
             {
-                throw new IOException("Arquivo grande demais para o editor.");
+                if (buffer.Length + read > maxBytes)
+                {
+                    throw new IOException("Arquivo grande demais para o editor.");
+                }
+
+                buffer.Write(chunk, 0, read);
             }
 
             return buffer.ToArray();

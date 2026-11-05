@@ -202,7 +202,7 @@ public sealed class SerialConnection : ITerminalConnection
                 DataReceived?.Invoke(buffer.AsMemory(0, read));
             }
         }
-        catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException or OperationCanceledException)
+        catch (Exception ex) // qualquer erro aqui (inclusive de quem recebe os dados) não pode derrubar o app
         {
             // Cabo/adaptador USB removido aparece aqui.
             reason = Volatile.Read(ref _closed) != 0 ? null : $"porta {_settings.PortName} fechada ({ex.Message})";

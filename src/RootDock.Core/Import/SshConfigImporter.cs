@@ -34,7 +34,7 @@ public static class SshConfigImporter
         {
             foreach (var (patterns, options) in blocks)
             {
-                if (patterns.Any(p => Matches(alias, p)) && options.TryGetValue(key, out var value))
+                if (BlockMatches(alias, patterns) && options.TryGetValue(key, out var value))
                 {
                     return value;
                 }
@@ -217,16 +217,49 @@ public static class SshConfigImporter
     private static List<string> Tokens(string value) =>
         value.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries).Select(t => t.Trim('"')).ToList();
 
-    private static bool Matches(string alias, string pattern)
+    /// <summary>
+    /// Como o ssh: o bloco vale se algum padrão positivo casa e NENHUM negado (!padrão) casa.
+    /// Ex.: "Host * !bastion" não aplica as opções ao bastion.
+    /// </summary>
+    private static bool BlockMatches(string alias, IEnumerable<string> patterns)
     {
-        if (pattern.StartsWith('!'))
+        var matched = false;
+        foreach (var pattern in patterns)
         {
-            return false;
+            if (pattern.StartsWith('!'))
+            {
+                if (Glob(alias, pattern[1..]))
+                {
+                    return false;
+                }
+            }
+            else if (!matched && Glob(alias, pattern))
+            {
+                matched = true;
+            }
         }
 
-        var regex = "^" + System.Text.RegularExpressions.Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\?", ".") + "$";
-        return System.Text.RegularExpressions.Regex.IsMatch(alias, regex, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return matched;
     }
+
+    /// <summary>Curinga do ssh (* e ?), com a regex de cada padrão montada uma vez só.</summary>
+    private static bool Glob(string alias, string pattern)
+    {
+        lock (PatternCache)
+        {
+            if (!PatternCache.TryGetValue(pattern, out var regex))
+            {
+                var expression = "^" + System.Text.RegularExpressions.Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\?", ".") + "$";
+                regex = new System.Text.RegularExpressions.Regex(expression,
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+                PatternCache[pattern] = regex;
+            }
+
+            return regex.IsMatch(alias);
+        }
+    }
+
+    private static readonly Dictionary<string, System.Text.RegularExpressions.Regex> PatternCache = new(StringComparer.Ordinal);
 
     private static string ExpandHome(string path) =>
         path.StartsWith('~')

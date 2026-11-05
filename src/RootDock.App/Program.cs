@@ -12,6 +12,7 @@ public static class Program
     [STAThread]
     public static void Main()
     {
+        StartupTrace.Begin();
         try
         {
             VelopackApp.Build()

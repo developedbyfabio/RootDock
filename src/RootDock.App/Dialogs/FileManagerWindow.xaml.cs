@@ -34,6 +34,8 @@ public partial class FileManagerWindow : FluentWindow
     private readonly TransferQueue _transfers;
     private readonly TransferHistory _history;
     private string _localPath;
+    private int _localVersion;
+    private bool _suppressPlace;
     private string _remotePath;
     private Point _dragStart;
     private ListBox? _dragSource;
@@ -163,44 +165,85 @@ public partial class FileManagerWindow : FluentWindow
             ("Downloads", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads")),
         };
         places = places.Where(p => Directory.Exists(p.Path)).ToList();
-        foreach (var drive in DriveInfo.GetDrives().Where(d => d.IsReady))
-        {
-            places.Add(($"Unidade {drive.Name.TrimEnd('\\')}{(string.IsNullOrEmpty(drive.VolumeLabel) ? "" : $" ({drive.VolumeLabel})")}", drive.RootDirectory.FullName));
-        }
-
         PlacesBox.Tag = places;
         PlacesBox.ItemsSource = places.Select(p => p.Name).ToList();
         PlacesBox.SelectedIndex = 0;
+        _ = AddDrivesAsync(places);
+    }
+
+    /// <summary>Unidades entram depois: IsReady de unidade de rede desconectada leva segundos.</summary>
+    private async Task AddDrivesAsync(List<(string Name, string Path)> places)
+    {
+        var drives = await Task.Run(() => DriveInfo.GetDrives()
+            .Where(d =>
+            {
+                try
+                {
+                    return d.IsReady;
+                }
+                catch (IOException)
+                {
+                    return false;
+                }
+            })
+            .Select(d => ($"Unidade {d.Name.TrimEnd('\\')}{(string.IsNullOrEmpty(d.VolumeLabel) ? "" : $" ({d.VolumeLabel})")}", d.RootDirectory.FullName))
+            .ToList());
+        if (drives.Count == 0)
+        {
+            return;
+        }
+
+        var selected = PlacesBox.SelectedIndex;
+        places.AddRange(drives);
+        _suppressPlace = true;
+        PlacesBox.ItemsSource = places.Select(p => p.Name).ToList();
+        PlacesBox.SelectedIndex = selected;
+        _suppressPlace = false;
     }
 
     private void OnPlace(object sender, SelectionChangedEventArgs e)
     {
-        if (PlacesBox.SelectedIndex >= 0 && PlacesBox.Tag is List<(string Name, string Path)> places)
+        if (!_suppressPlace && PlacesBox.SelectedIndex >= 0 && PlacesBox.Tag is List<(string Name, string Path)> places)
         {
             _localPath = places[PlacesBox.SelectedIndex].Path;
             LoadLocal();
         }
     }
 
-    private void LoadLocal()
+    private void LoadLocal() => _ = LoadLocalAsync();
+
+    /// <summary>
+    /// Lista a pasta local fora da thread da interface (pasta grande ou unidade de rede lenta não
+    /// travam a janela). Se o usuário já navegou para outra pasta, o resultado velho é descartado.
+    /// </summary>
+    private async Task LoadLocalAsync()
     {
+        var path = _localPath;
+        var version = ++_localVersion;
         try
         {
-            var dir = new DirectoryInfo(_localPath);
-            var rows = dir.EnumerateFileSystemInfos()
+            var rows = await Task.Run(() => new DirectoryInfo(path).EnumerateFileSystemInfos()
                 .Where(i => !i.Attributes.HasFlag(FileAttributes.System) || i is DirectoryInfo)
                 .Select(i => new FileRow(new RemoteEntry(i.Name, i.FullName, i is DirectoryInfo, false, i is FileInfo f ? f.Length : 0,
                     i.LastWriteTime, "", 0, 0), local: true))
                 .OrderByDescending(r => r.Entry.IsDirectory)
                 .ThenBy(r => r.Name, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
+                .ToList());
+            if (version != _localVersion)
+            {
+                return;
+            }
+
             LocalList.ItemsSource = rows;
-            LocalPathBox.Text = _localPath;
+            LocalPathBox.Text = path;
             LocalFooter.Text = Footer(rows);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
-            LocalFooter.Text = "Não foi possível abrir: " + ex.Message;
+            if (version == _localVersion)
+            {
+                LocalFooter.Text = "Não foi possível abrir: " + ex.Message;
+            }
         }
 
         CompareSummary.Text = "";
@@ -293,7 +336,7 @@ public partial class FileManagerWindow : FluentWindow
                 menu.Items.Add(Item("Mostrar no Explorer", () => Process.Start("explorer.exe", $"/select,\"{selected[0].Entry.FullPath}\"")));
             }
 
-            menu.Items.Add(Item("Copiar caminho", () => Clipboard.SetText(string.Join("\n", selected.Select(r => r.Entry.FullPath)))));
+            menu.Items.Add(Item("Copiar caminho", () => SafeClipboard.SetText(string.Join("\n", selected.Select(r => r.Entry.FullPath)))));
             menu.Items.Add(new Separator());
             if (selected.Count == 1)
             {
@@ -494,7 +537,7 @@ public partial class FileManagerWindow : FluentWindow
                 menu.Items.Add(Item("Trocar dono (chown)...", () => _ = ChangeOwnerAsync(one)));
             }
 
-            menu.Items.Add(Item("Copiar caminho", () => Clipboard.SetText(_source.WindowsPath?.Invoke(one.Entry) ?? one.Entry.FullPath)));
+            menu.Items.Add(Item("Copiar caminho", () => SafeClipboard.SetText(_source.WindowsPath?.Invoke(one.Entry) ?? one.Entry.FullPath)));
             menu.Items.Add(Item("Renomear (F2)", () => OnRemoteRename(this, null!)));
         }
 
@@ -527,7 +570,7 @@ public partial class FileManagerWindow : FluentWindow
             }
 
             Directory.CreateDirectory(path);
-            LoadLocal();
+            await LoadLocalAsync();
             SelectByName(LocalList, name.Trim());
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -568,7 +611,7 @@ public partial class FileManagerWindow : FluentWindow
                 File.Move(row.Entry.FullPath, target);
             }
 
-            LoadLocal();
+            await LoadLocalAsync();
             SelectByName(LocalList, name.Trim());
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -854,7 +897,7 @@ public partial class FileManagerWindow : FluentWindow
 
         if (send.Count > 0)
         {
-            TransferJobs.Upload(_transfers, _source, send, target);
+            await TransferJobs.UploadAsync(_transfers, _source, send, target);
             QueueTab.IsChecked = true;
             _ = RefreshRemoteWhenDoneAsync();
         }
@@ -1011,7 +1054,7 @@ public partial class FileManagerWindow : FluentWindow
     private async void OnCompare(object sender, RoutedEventArgs e)
     {
         await LoadRemoteAsync();
-        LoadLocal();
+        await LoadLocalAsync();
         var local = (LocalList.ItemsSource as IEnumerable<FileRow>)?.ToList() ?? [];
         var remote = (RemoteList.ItemsSource as IEnumerable<FileRow>)?.ToList() ?? [];
         var remoteByName = remote.ToDictionary(r => r.Name, StringComparer.Ordinal);
@@ -1088,21 +1131,43 @@ public partial class FileManagerWindow : FluentWindow
         try
         {
             var fs = await _source.Connect();
-            var remoteFiles = new Dictionary<string, RemoteEntry>(StringComparer.Ordinal);
-            var skippedLinks = new List<string>();
-            await CollectRemoteAsync(fs, remoteRoot, "", remoteFiles, skippedLinks, depth: 0);
-            if (skippedLinks.Count > 0)
+            var remote = new RemoteScan();
+            await CollectRemoteAsync(fs, remoteRoot, "", remote, depth: 0);
+            var remoteFiles = remote.Files;
+            if (remote.Truncated)
             {
-                warnings.Add($"{skippedLinks.Count} link(s) simbólico(s) ignorado(s) (ex.: {skippedLinks[0]}).");
+                // Sem a lista completa do servidor, o que não foi listado pareceria "faltando" e seria
+                // enviado por cima (inclusive arquivos mais novos lá).
+                var limit = $"mais de {RemoteScan.MaxFiles:N0} arquivos ou mais de {RemoteScan.MaxDepth} níveis de pastas";
+                if (upload)
+                {
+                    CompareSummary.Text = "";
+                    await Prompts.InfoAsync("Pasta grande demais para sincronizar",
+                        $"{remoteRoot} tem {limit}. Para não sobrescrever nada por engano, a sincronização foi cancelada. Escolha uma subpasta.");
+                    return;
+                }
+
+                warnings.Add($"O servidor tem {limit}: só a parte listada será baixada.");
             }
-            var localFiles = Directory.EnumerateFiles(localRoot, "*", SearchOption.AllDirectories)
-                .Select(f => new FileInfo(f))
-                .ToDictionary(f => Path.GetRelativePath(localRoot, f.FullName).Replace('\\', '/'), StringComparer.OrdinalIgnoreCase);
+
+            if (remote.SkippedLinks.Count > 0)
+            {
+                warnings.Add($"{remote.SkippedLinks.Count} link(s) simbólico(s) do servidor ficaram de fora (ex.: {remote.SkippedLinks[0]}).");
+            }
+
+            // Fora da thread da interface: a pasta pode ter milhares de arquivos ou estar na rede.
+            var localFiles = await Task.Run(() => ListLocalFiles(localRoot));
             plan = [];
             if (upload)
             {
                 foreach (var (rel, info) in localFiles)
                 {
+                    // Nunca escreve através de um link simbólico do servidor (ex.: current → releases/123).
+                    if (remote.IsUnderSkippedLink(rel))
+                    {
+                        continue;
+                    }
+
                     // Horários locais nos dois lados (o SFTP entrega no fuso deste computador).
                     if (!remoteFiles.TryGetValue(rel, out var r) || r.Size != info.Length || info.LastWriteTime > r.Modified.AddSeconds(2))
                     {
@@ -1144,6 +1209,7 @@ public partial class FileManagerWindow : FluentWindow
         }
 
         CompareSummary.Text = warnings.Count > 0 ? string.Join(" ", warnings) : "";
+        var notes = warnings.Count > 0 ? "\n\n" + string.Join("\n", warnings) : "";
         if (plan.Count == 0)
         {
             await Prompts.InfoAsync("Tudo sincronizado", upload
@@ -1157,7 +1223,7 @@ public partial class FileManagerWindow : FluentWindow
         var production = upload && _source.IsProduction ? "\n\nATENÇÃO: o servidor é de PRODUÇÃO." : "";
         if (!await Prompts.ConfirmAsync(
                 upload ? $"Enviar {plan.Count} arquivo(s) para o servidor?" : $"Baixar {plan.Count} arquivo(s) do servidor?",
-                $"{Format.Bytes(total)} no total. Arquivos com o mesmo nome no destino serão atualizados; nada será apagado.{production}\n\n{list}{(plan.Count > 12 ? $"\n... e mais {plan.Count - 12}" : "")}",
+                $"{Format.Bytes(total)} no total. Arquivos com o mesmo nome no destino serão atualizados; nada será apagado.{production}{notes}\n\n{list}{(plan.Count > 12 ? $"\n... e mais {plan.Count - 12}" : "")}",
                 upload ? "Enviar" : "Baixar",
                 danger: upload && _source.IsProduction))
         {
@@ -1198,10 +1264,11 @@ public partial class FileManagerWindow : FluentWindow
     /// Arquivos do servidor (com subpastas). Links simbólicos ficam de fora: um link para pasta
     /// (ex.: current → releases/123) pareceria arquivo e o download falharia.
     /// </summary>
-    private static async Task CollectRemoteAsync(IFileTransport fs, string root, string relative, Dictionary<string, RemoteEntry> files, List<string> skippedLinks, int depth)
+    private static async Task CollectRemoteAsync(IFileTransport fs, string root, string relative, RemoteScan scan, int depth)
     {
-        if (depth > 32 || files.Count > 50_000)
+        if (depth > RemoteScan.MaxDepth || scan.Files.Count > RemoteScan.MaxFiles)
         {
+            scan.Truncated = true;
             return;
         }
 
@@ -1211,17 +1278,53 @@ public partial class FileManagerWindow : FluentWindow
             var rel = relative.Length == 0 ? entry.Name : relative + "/" + entry.Name;
             if (entry.IsSymlink)
             {
-                skippedLinks.Add(rel);
+                scan.SkippedLinks.Add(rel);
             }
             else if (entry.IsDirectory)
             {
-                await CollectRemoteAsync(fs, root, rel, files, skippedLinks, depth + 1);
+                await CollectRemoteAsync(fs, root, rel, scan, depth + 1);
             }
             else
             {
-                files[rel] = entry;
+                scan.Files[rel] = entry;
             }
         }
+    }
+
+    /// <summary>Arquivos locais da pasta (com ocultos e subpastas), ignorando o que não dá para ler.</summary>
+    private static Dictionary<string, FileInfo> ListLocalFiles(string root)
+    {
+        var options = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = true,
+            AttributesToSkip = 0, // inclui ocultos (.env, .htaccess...), como antes
+            ReturnSpecialDirectories = false,
+        };
+        var files = new Dictionary<string, FileInfo>(StringComparer.OrdinalIgnoreCase);
+        foreach (var info in new DirectoryInfo(root).EnumerateFiles("*", options))
+        {
+            files[Path.GetRelativePath(root, info.FullName).Replace('\\', '/')] = info;
+        }
+
+        return files;
+    }
+
+    /// <summary>Resultado da listagem recursiva do servidor para sincronizar.</summary>
+    private sealed class RemoteScan
+    {
+        public const int MaxFiles = 50_000;
+        public const int MaxDepth = 32;
+
+        public Dictionary<string, RemoteEntry> Files { get; } = new(StringComparer.Ordinal);
+
+        public List<string> SkippedLinks { get; } = [];
+
+        /// <summary>A listagem parou no limite: a lista do servidor está incompleta.</summary>
+        public bool Truncated { get; set; }
+
+        public bool IsUnderSkippedLink(string relative) =>
+            SkippedLinks.Any(link => relative == link || relative.StartsWith(link + "/", StringComparison.Ordinal));
     }
 
     private static async Task EnsureRemoteDirectoryAsync(IFileTransport fs, string path, CancellationToken ct)

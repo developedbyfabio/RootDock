@@ -146,7 +146,7 @@ public partial class HistoryWindow : FluentWindow
     {
         if (Selected is { } command)
         {
-            Clipboard.SetText(command);
+            SafeClipboard.SetText(command);
         }
     }
 

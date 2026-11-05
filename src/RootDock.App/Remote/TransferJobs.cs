@@ -49,15 +49,19 @@ public sealed class FileManagerSource
 public static class TransferJobs
 {
     /// <summary>Envia arquivos e pastas do computador para <paramref name="targetDirectory"/>.</summary>
-    public static void Upload(TransferQueue queue, FileManagerSource source, IReadOnlyList<string> localPaths, string targetDirectory)
+    /// <remarks>A varredura das pastas roda fora da thread da interface (node_modules etc. não travam a janela).</remarks>
+    public static async Task UploadAsync(TransferQueue queue, FileManagerSource source, IReadOnlyList<string> localPaths, string targetDirectory)
     {
         foreach (var local in localPaths)
         {
             var name = Path.GetFileName(local.TrimEnd('\\'));
             if (Directory.Exists(local))
             {
-                var files = Directory.EnumerateFiles(local, "*", SearchOption.AllDirectories).ToList();
-                var total = files.Sum(f => new FileInfo(f).Length);
+                var (files, total) = await Task.Run(() =>
+                {
+                    var list = Directory.EnumerateFiles(local, "*", SearchOption.AllDirectories).ToList();
+                    return (list, list.Sum(f => new FileInfo(f).Length));
+                });
                 var remoteRoot = RemotePath.Combine(targetDirectory, name);
                 queue.Enqueue(name + "/", upload: true, total, async item =>
                 {

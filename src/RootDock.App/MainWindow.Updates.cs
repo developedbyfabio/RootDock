@@ -26,6 +26,23 @@ public partial class MainWindow
         RefreshUpdatePill();
     }
 
+    /// <summary>
+    /// A página dos terminais foi recarregada após uma falha do WebView2: reaplica tema e painel e
+    /// descarta o que só existia nela (editores, RDP, VNC). Os terminais o workspace já reabriu.
+    /// </summary>
+    private void OnPageReloaded()
+    {
+        _workspace.Send(AppThemes.PageMessage(AppThemes.Get(_settings.AppTheme)));
+        _workspace.Send(TerminalThemes.Message(_settings.Terminal, _settings.FontSize));
+        _workspace.SetCommandsPanelState(_settings.CommandsPanelOpen);
+        var editors = _workspace.Editors?.ForgetAll() ?? 0;
+        _rdp.CloseAll();
+        _vnc.CloseAll();
+        Notify(editors > 0
+            ? $"A área das abas foi recarregada após uma falha do WebView2. Terminais reabertos; {editors} editor(es), RDP e VNC foram fechados."
+            : "A área das abas foi recarregada após uma falha do WebView2. Os terminais foram reabertos.", true);
+    }
+
     /// <summary>Aviso na abertura logo depois de uma atualização.</summary>
     private void AnnounceUpdate()
     {

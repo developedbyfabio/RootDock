@@ -49,13 +49,21 @@ public partial class MainWindow : FluentWindow
     /// <summary>Sessão a abrir ao iniciar (argumento --open).</summary>
     public string? StartupSessionName { get; init; }
 
+    /// <summary>Ambiente do WebView2 já em criação desde a abertura do app (economiza ~1 s).</summary>
+    public Task<CoreWebView2Environment>? WebViewEnvironment { get; init; }
+
+    /// <summary>Sessões e preferências lidas em paralelo enquanto a janela é montada.</summary>
+    public Task<Core.Sessions.SessionDocument>? PreloadedSessions { get; init; }
+
+    public Task<AppSettings>? PreloadedSettings { get; init; }
+
     public MainWindow(AppPaths paths)
     {
         InitializeComponent();
         BuildMainMenu();
         _paths = paths;
         _settingsStore = new SettingsStore(paths.SettingsFile);
-        _settings = _settingsStore.Load();
+        _settings = PreloadedSettings?.GetAwaiter().GetResult() ?? _settingsStore.Load();
         ApplyStartupTheme();
         _sessions = new SessionManager(new SessionStore(paths.SessionsFile), _settings.CollapsedFolders);
         _knownHosts = new KnownHostsStore(paths.KnownHostsFile, KnownHostsStore.DefaultOpenSshFiles());
@@ -84,6 +92,7 @@ public partial class MainWindow : FluentWindow
         _workspace.History = _history;
         _workspace.HistoryRequested += OpenHistory;
         _workspace.RestoreRequested += RestoreWorkspace;
+        _workspace.PageReloaded += OnPageReloaded;
         _workspace.RecordingsDirectory = Path.Combine(paths.DataDirectory, "recordings");
         _workspace.Rdp = _rdp;
         _vnc = new Vnc.VncService(_workspace, _vault, _sessions, Notify);
@@ -129,6 +138,8 @@ public partial class MainWindow : FluentWindow
         InitCommands();
         RestorePlacement();
         InitUpdates();
+        StartupTrace.Mark("janela criada");
+        ContentRendered += (_, _) => StartupTrace.Mark("janela desenhada");
         Loaded += OnLoaded;
         Closing += OnClosing;
         PreviewKeyDown += OnWindowKeyDown;
@@ -140,10 +151,22 @@ public partial class MainWindow : FluentWindow
     {
         LoadSessions();
         RebuildTree();
+        StartupTrace.Mark("sessões na árvore");
 
+        // Antes do WebView2: o painel entra no primeiro desenho da janela, sem um novo layout depois.
+        if (_settings.CommandsPanelOpen)
+        {
+            SetCommandsPanel(true, focusSearch: false);
+        }
+
+
+        // Desenha a janela já (árvore, painéis) antes de criar o controle do WebView2: as respostas
+        // dele chegam com prioridade acima do desenho e seguravam o primeiro quadro por ~0,8 s.
+        await Dispatcher.Yield(DispatcherPriority.Background);
         try
         {
-            await _workspace.InitializeAsync(_paths.WebViewDirectory, _settings.FontSize);
+            await _workspace.InitializeAsync(WebViewEnvironment ?? CoreWebView2Environment.CreateAsync(null, _paths.WebViewDirectory), _settings.FontSize,
+                AppThemes.PageMessage(AppThemes.Get(_settings.AppTheme)));
             _workspace.Send(AppThemes.PageMessage(AppThemes.Get(_settings.AppTheme)));
             _workspace.Send(TerminalThemes.Message(_settings.Terminal, _settings.FontSize));
             OfferRestore();
@@ -154,11 +177,6 @@ public partial class MainWindow : FluentWindow
                 "O RootDock usa o Microsoft Edge WebView2 para desenhar os terminais.\n" +
                 "Instale o \"Evergreen Runtime\" em https://developer.microsoft.com/microsoft-edge/webview2/ e abra o RootDock de novo.");
             return;
-        }
-
-        if (_settings.CommandsPanelOpen)
-        {
-            SetCommandsPanel(true, focusSearch: false);
         }
 
         await OfferMobaXtermImportOnFirstRun();
@@ -182,7 +200,7 @@ public partial class MainWindow : FluentWindow
     {
         try
         {
-            _sessions.Load();
+            _sessions.Load(PreloadedSessions);
         }
         catch (SessionStoreCorruptedException ex)
         {
@@ -239,7 +257,33 @@ public partial class MainWindow : FluentWindow
         ApplyPicked();
     }
 
-    private void OnSearchChanged(object sender, TextChangedEventArgs e) => RebuildTree();
+    /// <summary>
+    /// Filtra depois de uma pausa curta na digitação: com milhares de sessões, reconstruir a árvore a
+    /// cada letra enfileirava reconstruções e travava a janela.
+    /// </summary>
+    private void OnSearchChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_searchTimer is null)
+        {
+            _searchTimer = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(180) };
+            _searchTimer.Tick += (_, _) =>
+            {
+                _searchTimer!.Stop();
+                RebuildTree();
+            };
+        }
+
+        _searchTimer.Stop();
+        if (SearchBox.Text.Length == 0)
+        {
+            RebuildTree(); // limpar a busca volta na hora
+            return;
+        }
+
+        _searchTimer.Start();
+    }
+
+    private DispatcherTimer? _searchTimer;
 
     private TreeGrouping Grouping =>
         Enum.TryParse<TreeGrouping>(_settings.TreeGrouping, out var grouping) ? grouping : TreeGrouping.Folders;
@@ -942,11 +986,11 @@ public partial class MainWindow : FluentWindow
                 SetCommandsPanel(!IsCommandsPanelOpen);
             }
         }
-        else if (mods == ModifierKeys.Control && e.Key == Key.F)
+        else if (mods == ModifierKeys.Control && e.Key == Key.F && !WebView.IsKeyboardFocusWithin)
         {
+            // No terminal/editor o Ctrl+F é deles (bash: avança um caractere; vim/less: página).
             e.Handled = true;
-            SearchBox.Focus();
-            SearchBox.SelectAll();
+            FocusSessionSearch(); // troca para a aba Sessões se estiver em Arquivos
         }
     }
 
@@ -971,6 +1015,12 @@ public partial class MainWindow : FluentWindow
         if (session is null || session.IsSsh)
         {
             FilesView.DataContext = session?.Files;
+        }
+        else if (FilesView.DataContext is RemoteFilesViewModel shown && !_workspace.Sessions.Any(s => s.Files == shown))
+        {
+            // Terminal local/Telnet ativo mantém os arquivos do último servidor, mas não se a aba
+            // dele já foi fechada (a lista era de um servidor desconectado e operava sobre nada).
+            FilesView.DataContext = null;
         }
 
         // Área de Trabalho Remota ativa: o painel de arquivos oferece os arquivos do servidor Windows.
@@ -1081,10 +1131,18 @@ public partial class MainWindow : FluentWindow
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
         var unsaved = _workspace.Editors?.DirtyCount ?? 0;
-        if (!_closeConfirmed && (_workspace.ConnectedCount > 0 || unsaved > 0))
+        var transfers = _transfers.Items.Count(i => i.IsActive); // FTP não entra nas conexões ativas
+        if (!_closeConfirmed && (_workspace.ConnectedCount > 0 || unsaved > 0 || transfers > 0))
         {
             e.Cancel = true;
             var lines = new List<string>();
+            if (transfers > 0)
+            {
+                lines.Add(transfers == 1
+                    ? "1 transferência de arquivo está em andamento ou na fila; ela será interrompida."
+                    : $"{transfers} transferências de arquivos estão em andamento ou na fila; elas serão interrompidas.");
+            }
+
             if (unsaved > 0)
             {
                 lines.Add(unsaved == 1
@@ -1149,7 +1207,7 @@ public partial class MainWindow : FluentWindow
         {
             _settingsStore.Save(_settings);
         }
-        catch (IOException ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Log.Error("Salvar preferências", ex);
         }

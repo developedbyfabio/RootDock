@@ -84,7 +84,7 @@ class VncPane {
       btn.classList.toggle('on', this.viewOnly);
       if (this.rfb) this.rfb.viewOnly = this.viewOnly;
     });
-    this.fullBtn = b('Tela cheia', 'Tela cheia (Esc sai)', () => this.screen.requestFullscreen && this.screen.requestFullscreen());
+    this.fullBtn = b('Tela cheia', 'Tela cheia (Esc sai)', () => this.screen.requestFullscreen && this.screen.requestFullscreen().catch(() => {}));
     this.disconnectBtn = b('Desconectar', 'Encerra a conexão VNC', () => this.rfb && this.rfb.disconnect());
     this.reconnectBtn = b('Reconectar', 'Conectar de novo', () => this.connect());
     bar.append(icon, name, this.desktopName, this.stateChip, el('span', 'spacer'), this.cadBtn, this.pasteBtn, this.scaleBtn, this.viewBtn, this.fullBtn, this.disconnectBtn, this.reconnectBtn);
@@ -160,6 +160,12 @@ class VncPane {
       return;
     }
     if (this.disposed) return;
+    // Um vncUrl repetido não pode deixar a conexão anterior órfã (WebSocket aberto decodificando quadros).
+    const previous = this.rfb;
+    this.rfb = null;
+    if (previous) {
+      try { previous.disconnect(); } catch (err) { console.warn('vnc anterior', err); }
+    }
     this.canvasHost.replaceChildren();
     const rfb = new RFB(this.canvasHost, url, { wsProtocols: ['binary'] });
     rfb.scaleViewport = this.scale;
@@ -171,6 +177,7 @@ class VncPane {
     rfb.qualityLevel = 6;
     rfb.compressionLevel = 2;
     rfb.addEventListener('connect', () => {
+      if (this.rfb !== rfb) return;
       this.setState('connected');
       if (this.typedPassword && this.rememberBox.checked && this.saved) send({ type: 'vncRemember', id: this.id, password: this.typedPassword });
       this.typedPassword = null;

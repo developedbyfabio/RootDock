@@ -9,14 +9,21 @@ public enum HostKeyStatus
     /// <summary>Chave já conhecida e igual.</summary>
     Trusted,
 
-    /// <summary>Servidor nunca visto (ou visto com outro tipo de chave).</summary>
+    /// <summary>Servidor nunca visto.</summary>
     Unknown,
+
+    /// <summary>
+    /// Servidor conhecido por chave de OUTRO tipo (ex.: salvo ed25519, agora ecdsa). Pode ser um tipo
+    /// novo no servidor ou alguém interceptando oferecendo só um tipo que ainda não conhecemos.
+    /// </summary>
+    OtherKeyType,
 
     /// <summary>Servidor conhecido, mas a chave mudou. Pode ser reinstalação ou ataque.</summary>
     Changed,
 }
 
-public sealed record HostKeyCheck(HostKeyStatus Status, string KeyType, string FingerprintSha256, string? Source);
+/// <param name="KnownKeyTypes">Tipos de chave já salvos para o host (em <see cref="HostKeyStatus.OtherKeyType"/>).</param>
+public sealed record HostKeyCheck(HostKeyStatus Status, string KeyType, string FingerprintSha256, string? Source, IReadOnlyList<string>? KnownKeyTypes = null);
 
 /// <summary>
 /// Chaves de servidores conhecidos no formato OpenSSH.
@@ -68,12 +75,25 @@ public sealed class KnownHostsStore
 
         var changed = false;
         string? changedSource = null;
+        var otherTypes = new List<string>();
+        string? otherSource = null;
         foreach (var file in new[] { _ownFile }.Concat(_readOnlyFiles))
         {
             foreach (var entry in ReadEntries(file))
             {
-                if (!entry.Matches(token) || !string.Equals(entry.KeyType, keyType, StringComparison.Ordinal))
+                if (!entry.Matches(token))
                 {
+                    continue;
+                }
+
+                if (!string.Equals(entry.KeyType, keyType, StringComparison.Ordinal))
+                {
+                    if (!otherTypes.Contains(entry.KeyType))
+                    {
+                        otherTypes.Add(entry.KeyType);
+                    }
+
+                    otherSource ??= file;
                     continue;
                 }
 
@@ -87,7 +107,33 @@ public sealed class KnownHostsStore
             }
         }
 
-        return new HostKeyCheck(changed ? HostKeyStatus.Changed : HostKeyStatus.Unknown, keyType, fingerprint, changedSource);
+        if (changed)
+        {
+            return new HostKeyCheck(HostKeyStatus.Changed, keyType, fingerprint, changedSource);
+        }
+
+        return otherTypes.Count > 0
+            ? new HostKeyCheck(HostKeyStatus.OtherKeyType, keyType, fingerprint, otherSource, otherTypes)
+            : new HostKeyCheck(HostKeyStatus.Unknown, keyType, fingerprint, null);
+    }
+
+    /// <summary>Tipos de chave já salvos para o host (para a negociação preferir um deles, como o OpenSSH).</summary>
+    public IReadOnlyList<string> KnownKeyTypes(string host, int port)
+    {
+        var token = HostToken(host, port);
+        var types = new List<string>();
+        foreach (var file in new[] { _ownFile }.Concat(_readOnlyFiles))
+        {
+            foreach (var entry in ReadEntries(file))
+            {
+                if (entry.Matches(token) && !types.Contains(entry.KeyType))
+                {
+                    types.Add(entry.KeyType);
+                }
+            }
+        }
+
+        return types;
     }
 
     /// <summary>Grava a chave como confiável, substituindo a anterior do mesmo tipo para este host.</summary>

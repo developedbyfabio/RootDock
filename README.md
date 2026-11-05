@@ -242,6 +242,34 @@ O ícone do programa vem de `icone.png` (raiz). Ao trocá-lo, gere de novo `src/
 - Salvar no editor guarda a versão atual do servidor antes de gravar e a restaura se a gravação falhar no meio (disco cheio, queda de rede). Arquivo em Latin-1 com caractere que não cabe nele (€, emoji) avisa em vez de gravar "?".
 - MultiExec: a confirmação EXECUTAR vale só para o comando que estava escrito; logs, relatório e recentes saem com senhas mascaradas.
 
+## Desempenho e robustez
+
+Medido numa máquina de escritório (i5-1334U, 16 GB, com Visual Studio e navegador abertos):
+
+| | Antes | Agora |
+|---|---|---|
+| Janela aparece (20 sessões) | 2,1–3,6 s | 1,3 s |
+| Terminal pronto para uso | 3,0–4,8 s | 2,0 s |
+| Janela aparece com 2.000 sessões | 6,4 s | 1,2 s |
+| Busca na árvore com 2.000 sessões (por letra) | até 18 s | 0,1–0,2 s |
+| CPU com o programa parado | 0,5–14 % | 0,2 % |
+| Memória extra durante saída de 60 MB no terminal | +310 MB | +30 MB |
+
+Como foi feito:
+
+- **Abertura:** o WebView2 começa a subir junto com o programa; preferências e sessões são lidas
+  em paralelo, com JSON gerado na compilação (sem reflexão); a janela é desenhada antes de o WebView2 ficar pronto.
+  O log registra os tempos de cada etapa a cada abertura ("Inicialização (ms): ...").
+- **Terminal:** controle de fluxo por créditos entre o C# e a página: a página confirma o que o xterm já desenhou.
+  No SSH, que não segura o servidor, a saída retida tem teto e o excesso vira o aviso "[N MB omitidos]".
+  Se o processo de desenho do WebView2 cair, a página volta sozinha com os terminais conectados.
+- **Listas:** a árvore de sessões e as filas de transferência são virtualizadas; a busca e o filtro esperam a pausa na digitação.
+- **Rede e arquivos:** E/S de disco fora da thread da interface. A sincronização "→ servidor" é cancelada se a listagem
+  do servidor ficar incompleta e nunca escreve através de links simbólicos.
+
+Testes de integração opcionais: FTP (`ROOTDOCK_FTP_TEST=1`) e SSH (`ROOTDOCK_SSH_TEST=1` com as variáveis descritas em
+`tests/RootDock.Core.Tests/MultiExecOutputTests.cs`).
+
 ## Próximas etapas
 
 1. Editor do RootDock também para arquivos de FTP (hoje: abre uma cópia no programa padrão).

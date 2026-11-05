@@ -41,11 +41,12 @@ public sealed class SessionManager
 
     public string FilePath => _store.FilePath;
 
-    public void Load()
+    /// <param name="preloaded">Leitura já feita em paralelo na abertura do app (mesmo arquivo); null lê agora.</param>
+    public void Load(Task<SessionDocument>? preloaded = null)
     {
         try
         {
-            Document = _store.Load();
+            Document = preloaded is not null ? preloaded.GetAwaiter().GetResult() : _store.Load();
             IsReadOnly = false;
         }
         catch (SessionStoreCorruptedException)

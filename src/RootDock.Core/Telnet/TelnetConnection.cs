@@ -226,7 +226,7 @@ public sealed partial class TelnetConnection : ITerminalConnection
                 }
             }
         }
-        catch (Exception ex) when (ex is IOException or ObjectDisposedException or SocketException)
+        catch (Exception ex)
         {
             reason = Volatile.Read(ref _closed) != 0 ? null : ex.Message;
         }

@@ -437,33 +437,102 @@ public partial class MainWindow
 
     private void BringIntoView(TreeNode target) => FindContainer(target)?.BringIntoView();
 
-    /// <summary>Item visual (TreeViewItem) de um nó, procurando só nas pastas abertas.</summary>
+    /// <summary>
+    /// Item visual (TreeViewItem) de um nó. A árvore é virtualizada: um item fora da tela não existe
+    /// até rolar até ele, então o caminho é percorrido abrindo as pastas e pedindo ao painel de cada
+    /// nível que crie o item (BringIndexIntoViewPublic).
+    /// </summary>
     private TreeViewItem? FindContainer(object? target)
     {
-        TreeViewItem? Search(ItemsControl parent)
+        if (target is not TreeNode node || PathTo(node) is not { } path)
         {
-            foreach (var item in parent.Items)
-            {
-                if (parent.ItemContainerGenerator.ContainerFromItem(item) is not TreeViewItem container)
-                {
-                    continue;
-                }
-
-                if (item == target)
-                {
-                    return container;
-                }
-
-                if (container.IsExpanded && Search(container) is { } found)
-                {
-                    return found;
-                }
-            }
-
             return null;
         }
 
-        return target is null ? null : Search(SessionTree);
+        ItemsControl parent = SessionTree;
+        TreeViewItem? container = null;
+        foreach (var step in path)
+        {
+            var index = parent.Items.IndexOf(step);
+            if (index < 0)
+            {
+                return null;
+            }
+
+            container = parent.ItemContainerGenerator.ContainerFromIndex(index) as TreeViewItem;
+            if (container is null)
+            {
+                parent.ApplyTemplate();
+                parent.UpdateLayout();
+                if (FindItemsHost(parent) is { } panel)
+                {
+                    panel.BringIndexIntoViewPublic(index);
+                    container = parent.ItemContainerGenerator.ContainerFromIndex(index) as TreeViewItem;
+                }
+            }
+
+            if (container is null)
+            {
+                return null;
+            }
+
+            if (!ReferenceEquals(step, node))
+            {
+                container.IsExpanded = true;
+            }
+
+            parent = container;
+        }
+
+        return container;
+    }
+
+    /// <summary>Nós da raiz até <paramref name="target"/> (inclusive), ou null se não está na árvore atual.</summary>
+    private List<TreeNode>? PathTo(TreeNode target)
+    {
+        bool Walk(IEnumerable<TreeNode> level, List<TreeNode> path)
+        {
+            foreach (var item in level)
+            {
+                path.Add(item);
+                if (ReferenceEquals(item, target) || (item is FolderNode folder && Walk(folder.Children, path)))
+                {
+                    return true;
+                }
+
+                path.RemoveAt(path.Count - 1);
+            }
+
+            return false;
+        }
+
+        var result = new List<TreeNode>();
+        return SessionTree.ItemsSource is IEnumerable<TreeNode> roots && Walk(roots, result) ? result : null;
+    }
+
+    private static VirtualizingStackPanel? FindItemsHost(ItemsControl owner)
+    {
+        var queue = new Queue<DependencyObject>();
+        queue.Enqueue(owner);
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            for (var i = 0; i < VisualTreeHelper.GetChildrenCount(current); i++)
+            {
+                var child = VisualTreeHelper.GetChild(current, i);
+                if (child is VirtualizingStackPanel { IsItemsHost: true } panel && ItemsControl.GetItemsOwner(panel) == owner)
+                {
+                    return panel;
+                }
+
+                if (child is not TreeViewItem) // não desce nos itens filhos (cada um tem o seu painel)
+                {
+                    queue.Enqueue(child);
+                }
+            }
+        }
+
+        return null;
     }
 
     private static T? FindAncestor<T>(object source)

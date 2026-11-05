@@ -7,7 +7,7 @@
 const SNAP_STORAGE = 'rootdock.snap.v1';
 const SNAP_MAX_ROWS = 1500;
 const SNAP_WRAP_COLUMNS = 100;
-const SNAP_MAX_PIXELS = 120e6;   // limite de área do canvas (memória)
+const SNAP_MAX_PIXELS = 40e6;    // limite de área do canvas (~160 MB de bitmap; acima disso a máquina sofre)
 const SNAP_MAX_SIDE = 16000;     // limite de lado do canvas
 const SNAP_UI_FONT = "'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif";
 const SNAP_CAMERA = '<svg viewBox="0 0 16 16"><path d="M2.5 5.2h2.1l1.1-1.7h4.6l1.1 1.7h2.1a1 1 0 0 1 1 1v6.3a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V6.2a1 1 0 0 1 1-1z"/><circle cx="8" cy="9.1" r="2.4"/></svg>';
@@ -270,7 +270,9 @@ function snapRows(model, opts) {
   }));
   if (opts.mask) lines.forEach(snapMaskLine);
   if (model.kind === 'editor' && opts.dedent) snapDedent(lines);
-  return opts.wrap ? lines.flatMap((l) => snapWrap(l, SNAP_WRAP_COLUMNS)) : lines;
+  // A quebra de linha multiplica as linhas: o teto vale também depois dela.
+  const out = opts.wrap ? lines.flatMap((l) => snapWrap(l, SNAP_WRAP_COLUMNS)) : lines;
+  return out.length > SNAP_MAX_ROWS ? out.slice(0, SNAP_MAX_ROWS) : out;
 }
 
 // ------------------------------------------------ Desenho
@@ -740,7 +742,8 @@ function renderSnapPreview() {
 function snapExportScale(layout, wanted) {
   const bySide = SNAP_MAX_SIDE / Math.max(layout.width, layout.height);
   const byArea = Math.sqrt(SNAP_MAX_PIXELS / (layout.width * layout.height));
-  return Math.max(0.5, Math.min(wanted, bySide, byArea));
+  // Sem piso: um piso de 0,5 passava por cima do limite de lado do Chromium (32.767 px) e da memória.
+  return Math.min(wanted, bySide, byArea);
 }
 
 function onSnapCanvasClick(e) {
@@ -804,15 +807,19 @@ function snapExport(action) {
   const scale = snapExportScale(layout, snap.opts.scale);
   snapDraw(work, snap.model, snap.opts, rows, layout, scale, snap.title, snap.highlights);
   let png;
+  const outWidth = work.width;
+  const outHeight = work.height;
   try {
     png = work.toDataURL('image/png').split(',')[1];
+    work.width = work.height = 0; // libera o bitmap já (pode ter dezenas de MB)
+    if (!png) throw new Error('canvas vazio'); // o Chromium devolve "data:," sem erro quando o canvas é grande demais
   } catch {
     setSnapStatus('Não foi possível gerar a imagem (seleção grande demais).', 'error');
     return;
   }
   snap.busy = true;
   setSnapStatus(action === 'copy' ? 'Copiando…' : action === 'pdf' ? 'Gerando o PDF…' : 'Salvando…');
-  send({ type: 'snapExport', action, png, width: work.width, height: work.height, scale, title: snap.title || snap.model.title });
+  send({ type: 'snapExport', action, png, width: outWidth, height: outHeight, scale, title: snap.title || snap.model.title });
 }
 
 function openSnap(pane) {

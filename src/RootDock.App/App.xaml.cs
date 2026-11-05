@@ -3,6 +3,8 @@ using System.Windows;
 using System.Windows.Threading;
 using RootDock.App.Services;
 using RootDock.Core;
+using RootDock.Core.Sessions;
+using RootDock.Core.Settings;
 
 namespace RootDock.App;
 
@@ -38,10 +40,23 @@ public partial class App : Application
 
         // Ao reiniciar depois de atualizar, volta com a mesma pasta de dados (o resto não se repete).
         UpdateService.Current = new UpdateService(Dispatcher, dataOption is { Length: > 0 } ? ["--data", Path.GetFullPath(dataOption)] : []);
+
+        // O navegador do WebView2 (processos do Edge) leva ~1 s para subir: começa já, enquanto a
+        // janela é montada, em vez de esperar a janela aparecer.
+        var webView = StartWebViewEnvironment(paths.WebViewDirectory);
+
+        // Preferências e sessões são lidas em outra thread enquanto o XAML da janela é montado.
+        var settingsFile = paths.SettingsFile;
+        var sessionsFile = paths.SessionsFile;
+        var settings = Task.Run(() => new SettingsStore(settingsFile).Load());
+        var sessions = Task.Run(() => new SessionStore(sessionsFile).Load());
         var window = new MainWindow(paths)
         {
             // RootDock.exe --open "Nome da sessão"  (útil para atalhos na área de trabalho)
             StartupSessionName = ReadOption(e.Args, "--open"),
+            WebViewEnvironment = webView,
+            PreloadedSettings = settings,
+            PreloadedSessions = sessions,
         };
         MainWindow = window;
         window.Show();
@@ -52,6 +67,20 @@ public partial class App : Application
         // Versão nova já baixada: instala agora que o RootDock está fechando.
         UpdateService.Current?.ApplyOnExit();
         base.OnExit(e);
+    }
+
+    private static Task<Microsoft.Web.WebView2.Core.CoreWebView2Environment>? StartWebViewEnvironment(string userDataFolder)
+    {
+        try
+        {
+            return Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateAsync(null, userDataFolder);
+        }
+        catch (Exception ex)
+        {
+            // Sem WebView2 instalado etc.: a janela tenta de novo e mostra a explicação de sempre.
+            Log.Error("Criar o ambiente do WebView2", ex);
+            return null;
+        }
     }
 
     private static string? ReadOption(string[] args, string name)

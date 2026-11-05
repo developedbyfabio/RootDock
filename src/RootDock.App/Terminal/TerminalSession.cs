@@ -34,6 +34,29 @@ public sealed class TerminalSession : IDisposable, ITerminalPrompter
     private readonly object _gate = new();
     private readonly ManualResetEventSlim _flow = new(true);
 
+    /// <summary>
+    /// Teto do texto guardado enquanto a tela está em pausa (SSH). O SSH.NET não segura o servidor
+    /// (renova a janela do canal assim que os dados chegam), então parar de ler só acumularia tudo
+    /// na memória dele. Passando do teto, a parte mais antiga é descartada e a tela recebe um aviso.
+    /// </summary>
+    private const int OverflowChars = 4 * 1024 * 1024;
+
+    /// <summary>
+    /// Caracteres postados para a página e ainda não confirmados (créditos). Acima do teto o texto
+    /// fica guardado aqui em vez de lotar a fila do WebView2 (que a página não enxerga). Só a thread
+    /// da interface mexe neste campo.
+    /// </summary>
+    private const long InflightHigh = 8L * 1024 * 1024;
+
+    /// <summary>Texto guardado acima do qual uma conexão sem perda (Telnet, serial, local) para de ler.</summary>
+    private const int PendingCap = 2 * 1024 * 1024;
+
+    private long _inflight;
+    private volatile bool _paused;
+    private long _droppedChars;
+    private int _generation;
+    private Action<ReadOnlyMemory<byte>>? _dataHandler;
+
     private ITerminalConnection? _connection;
     private SshTerminalConnection? _ssh;
     private ServerMonitor? _monitor;
@@ -189,24 +212,95 @@ public sealed class TerminalSession : IDisposable, ITerminalPrompter
         }
     }
 
-    public void PauseOutput() => _flow.Reset();
+    /// <summary>
+    /// A tela pediu pausa (xterm com fila cheia). Telnet, serial e terminal local param de ler e o
+    /// remetente espera (sem perda). SSH continua lendo até o teto (ver <see cref="OverflowChars"/>).
+    /// </summary>
+    public void PauseOutput()
+    {
+        lock (_gate)
+        {
+            _paused = true;
+            if (!IsSsh)
+            {
+                _flow.Reset();
+            }
+        }
+    }
 
-    public void ResumeOutput() => _flow.Set();
+    public void ResumeOutput()
+    {
+        lock (_gate)
+        {
+            _paused = false;
+            _flow.Set();
+        }
 
-    /// <summary>Retira o texto acumulado para enviar à tela.</summary>
+        _workspace.ScheduleFlush(this); // o que juntou durante a pausa
+    }
+
+    /// <summary>A página confirmou que o xterm processou <paramref name="chars"/> caracteres.</summary>
+    internal void Acknowledge(long chars)
+    {
+        var wasBlocked = _inflight >= InflightHigh;
+        _inflight = Math.Max(0, _inflight - chars);
+        if (wasBlocked && _inflight < InflightHigh)
+        {
+            _workspace.ScheduleFlush(this);
+        }
+    }
+
+    /// <summary>Página recarregada: o que estava a caminho se perdeu, recomeça do zero.</summary>
+    internal void ResetFlow()
+    {
+        _inflight = 0;
+        ResumeOutput();
+    }
+
+    /// <summary>
+    /// Retira o texto acumulado para enviar à tela. Nada sai enquanto ela está em pausa ou com
+    /// créditos esgotados; o texto espera aqui (SSH com teto, os demais segurando o remetente).
+    /// </summary>
     internal string TakePending()
     {
         lock (_gate)
         {
-            if (_pending.Length == 0)
+            if (_pending.Length == 0 || _paused || _inflight >= InflightHigh)
             {
                 return "";
             }
 
             var text = _pending.ToString();
             _pending.Clear();
+            _inflight += text.Length;
+            if (!IsSsh)
+            {
+                _flow.Set(); // esvaziou: a leitura pode continuar
+            }
+            if (_droppedChars > 0)
+            {
+                var megabytes = _droppedChars / (1024.0 * 1024.0);
+                text = $"{Reset}\r\n{Yellow}[... {megabytes:0.#} MB de saída omitidos para não esgotar a memória ...]{Reset}\r\n" + text;
+                _droppedChars = 0;
+            }
+
             return text;
         }
+    }
+
+    /// <summary>Chamado com o lock: descarta o início do texto guardado, começando numa linha nova.</summary>
+    private void TrimOverflow()
+    {
+        var cut = _pending.Length - OverflowChars / 2;
+        var probe = _pending.ToString(cut, Math.Min(64 * 1024, _pending.Length - cut));
+        var newline = probe.IndexOf('\n');
+        if (newline >= 0)
+        {
+            cut += newline + 1; // não corta no meio de uma sequência de escape
+        }
+
+        _pending.Remove(0, cut);
+        _droppedChars += cut;
     }
 
     public void Dispose()
@@ -217,6 +311,7 @@ public sealed class TerminalSession : IDisposable, ITerminalPrompter
         }
 
         _disposed = true;
+        _monitorIdle?.Stop();
         StopRecording();
         _workspace.Services?.Tunnels.Detach(this);
         _connectCts?.Cancel();
@@ -250,7 +345,9 @@ public sealed class TerminalSession : IDisposable, ITerminalPrompter
             }
 
             _connection = connection;
-            connection.DataReceived += OnData;
+            var generation = Interlocked.Increment(ref _generation);
+            _dataHandler = data => OnData(generation, data);
+            connection.DataReceived += _dataHandler;
             connection.Closed += OnClosed;
             if (connection is SshTerminalConnection ssh)
             {
@@ -280,11 +377,13 @@ public sealed class TerminalSession : IDisposable, ITerminalPrompter
         }
     }
 
-    private void OnData(ReadOnlyMemory<byte> data)
+    private void OnData(int generation, ReadOnlyMemory<byte> data)
     {
-        // Contrapressão: se a tela pediu pausa, a thread de leitura espera aqui.
+        // Contrapressão: se a tela pediu pausa, a thread de leitura espera aqui (exceto SSH).
         _flow.Wait();
-        if (_disposed)
+
+        // Conexão antiga (reconectou enquanto esta thread esperava): o dado não é desta sessão.
+        if (_disposed || generation != Volatile.Read(ref _generation))
         {
             return;
         }
@@ -297,6 +396,17 @@ public sealed class TerminalSession : IDisposable, ITerminalPrompter
             lock (_gate)
             {
                 _pending.Append(chars, 0, count);
+                if (IsSsh)
+                {
+                    if (_pending.Length > OverflowChars)
+                    {
+                        TrimOverflow();
+                    }
+                }
+                else if (_pending.Length > PendingCap)
+                {
+                    _flow.Reset(); // a próxima leitura espera a tela consumir (sem perda)
+                }
             }
         }
         finally
@@ -341,7 +451,61 @@ public sealed class TerminalSession : IDisposable, ITerminalPrompter
         }
 
         services?.Tunnels.Attach(this);
-        var monitor = new ServerMonitor(ssh.Client);
+        StartMonitor();
+        if (_workspace.ActiveSession is { } active && active != this)
+        {
+            SetMonitorActive(false); // aberta em segundo plano (ex.: reabrir várias abas)
+        }
+    }
+
+    /// <summary>
+    /// Monitor de status só na aba ativa: em segundo plano ele rodaria o script no servidor a cada
+    /// 2 s e atualizaria a interface sem ninguém ver. Ao sair da aba, para depois de um tempo (troca
+    /// rápida entre abas não reabre o canal); ao voltar, religa na hora.
+    /// </summary>
+    internal void SetMonitorActive(bool active)
+    {
+        if (active)
+        {
+            _monitorIdle?.Stop();
+            if (_monitor is null && State == TerminalState.Connected && _ssh?.Client is not null)
+            {
+                StartMonitor();
+            }
+
+            return;
+        }
+
+        if (_monitor is null)
+        {
+            return;
+        }
+
+        if (_monitorIdle is null)
+        {
+            _monitorIdle = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
+            _monitorIdle.Tick += (_, _) =>
+            {
+                _monitorIdle!.Stop();
+                _monitor?.Dispose();
+                _monitor = null;
+            };
+        }
+
+        _monitorIdle.Stop();
+        _monitorIdle.Start();
+    }
+
+    private System.Windows.Threading.DispatcherTimer? _monitorIdle;
+
+    private void StartMonitor()
+    {
+        if (_ssh?.Client is not { } client)
+        {
+            return;
+        }
+
+        var monitor = new ServerMonitor(client);
         monitor.SnapshotReceived += snapshot => _workspace.Dispatcher.BeginInvoke(() =>
         {
             if (_monitor != monitor)
@@ -389,15 +553,23 @@ public sealed class TerminalSession : IDisposable, ITerminalPrompter
         _monitor = null;
         var connection = _connection;
         _connection = null;
+        Interlocked.Increment(ref _generation); // threads ainda dentro de OnData descartam o que trazem
         if (connection is not null)
         {
-            connection.DataReceived -= OnData;
+            if (_dataHandler is not null)
+            {
+                connection.DataReceived -= _dataHandler;
+            }
+
             connection.Closed -= OnClosed;
             connection.Dispose();
         }
     }
 
     private void WriteStatus(string message) => WriteText($"{Dim}{message}{Reset}\r\n");
+
+    /// <summary>Aviso em amarelo no terminal (ex.: página recarregada após falha).</summary>
+    internal void WriteNotice(string message) => WriteText($"\r\n{Yellow}● {message}{Reset}\r\n");
 
     private void WriteText(string text)
     {

@@ -66,7 +66,13 @@ public partial class MultiExecWindow : FluentWindow
                      .ThenBy(s => s.Name, StringComparer.CurrentCultureIgnoreCase))
         {
             var item = new TargetItem(entry, open.Contains(entry.Id)) { IsSelected = picked.Contains(entry.Id) };
-            item.PropertyChanged += (_, _) => UpdateState();
+            item.PropertyChanged += (_, _) =>
+            {
+                if (!_bulkSelecting)
+                {
+                    UpdateState();
+                }
+            };
             _targets.Add(item);
         }
 
@@ -103,29 +109,32 @@ public partial class MultiExecWindow : FluentWindow
         TargetsList.Items.Filter = text.Length == 0 ? null : o => SessionManager.Matches(((TargetItem)o).Entry, text);
     }
 
-    private void OnSelectVisible(object sender, RoutedEventArgs e)
+    private void OnSelectVisible(object sender, RoutedEventArgs e) => SelectAll(TargetsList.Items.Cast<TargetItem>(), _ => true);
+
+    private void OnSelectNone(object sender, RoutedEventArgs e) => SelectAll(_targets, _ => false);
+
+    private void OnSelectOpen(object sender, RoutedEventArgs e) => SelectAll(_targets, item => item.IsOpen);
+
+    /// <summary>Marca vários de uma vez com um único recálculo (2.000 servidores = 2.000 recálculos antes).</summary>
+    private void SelectAll(IEnumerable<TargetItem> items, Func<TargetItem, bool> selected)
     {
-        foreach (TargetItem item in TargetsList.Items)
+        _bulkSelecting = true;
+        try
         {
-            item.IsSelected = true;
+            foreach (var item in items.ToList())
+            {
+                item.IsSelected = selected(item);
+            }
         }
+        finally
+        {
+            _bulkSelecting = false;
+        }
+
+        UpdateState();
     }
 
-    private void OnSelectNone(object sender, RoutedEventArgs e)
-    {
-        foreach (var item in _targets)
-        {
-            item.IsSelected = false;
-        }
-    }
-
-    private void OnSelectOpen(object sender, RoutedEventArgs e)
-    {
-        foreach (var item in _targets)
-        {
-            item.IsSelected = item.IsOpen;
-        }
-    }
+    private bool _bulkSelecting;
 
     private void OnHistoryPicked(object sender, SelectionChangedEventArgs e)
     {
@@ -401,7 +410,7 @@ public partial class MultiExecWindow : FluentWindow
     {
         if (OutputBox.Text.Length > 0)
         {
-            Clipboard.SetText(OutputBox.Text);
+            SafeClipboard.SetText(OutputBox.Text);
         }
     }
 
@@ -409,7 +418,7 @@ public partial class MultiExecWindow : FluentWindow
     {
         if (_results.Count > 0)
         {
-            Clipboard.SetText(Report());
+            SafeClipboard.SetText(Report());
         }
     }
 

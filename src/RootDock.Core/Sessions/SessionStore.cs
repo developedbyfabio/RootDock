@@ -12,12 +12,7 @@ public sealed class SessionStoreCorruptedException(string path, Exception inner)
 /// <summary>Lê e grava o arquivo de sessões (JSON) com escrita atômica e backup da versão anterior.</summary>
 public sealed class SessionStore
 {
-    internal static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-    };
+    internal static readonly JsonSerializerOptions JsonOptions = Serialization.RootDockJson.Options;
 
     private readonly string _path;
     private readonly object _gate = new();

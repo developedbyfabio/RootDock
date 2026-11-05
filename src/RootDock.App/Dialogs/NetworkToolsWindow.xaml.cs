@@ -322,16 +322,35 @@ public partial class NetworkToolsWindow : FluentWindow
     };
 
     // ------------------------------------------------------------------ saída
+    /// <summary>Ping contínuo esquecido aberto por horas: guarda só as últimas linhas.</summary>
+    private const int MaxLines = 5000;
+    private const int TrimLines = 1000;
+    private int _lines;
+
     private void SetOutput(string text)
     {
         _output.Clear().Append(text);
         OutputBox.Text = text;
+        _lines = text.Count(c => c == '\n');
     }
 
     private void Line(string text = "")
     {
         _output.Append(text).Append('\n');
         OutputBox.AppendText(text + "\n");
+        if (++_lines > MaxLines)
+        {
+            var all = _output.ToString();
+            var cut = 0;
+            for (var i = 0; i < TrimLines && cut < all.Length; i++)
+            {
+                var next = all.IndexOf('\n', cut);
+                cut = next < 0 ? all.Length : next + 1;
+            }
+
+            SetOutput("[... linhas antigas descartadas ...]\n" + all[cut..]);
+        }
+
         OutputBox.ScrollToEnd();
     }
 
@@ -339,7 +358,7 @@ public partial class NetworkToolsWindow : FluentWindow
     {
         if (OutputBox.Text.Length > 0)
         {
-            Clipboard.SetText(OutputBox.Text);
+            SafeClipboard.SetText(OutputBox.Text);
             StatusText.Text = "Resultado copiado.";
         }
     }

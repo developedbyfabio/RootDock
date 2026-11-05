@@ -129,6 +129,15 @@ function snapTokenCacheReset() {
 function setupMonaco(monaco) {
   applyEditorTheme(monaco);
 
+  // Arquivo de servidor aberto solto, sem o projeto: a checagem semântica do TypeScript só acusaria
+  // erros falsos ("Cannot find name 'require'") e gasta CPU no worker. A de sintaxe continua.
+  const ts = monaco.typescript || (monaco.languages && monaco.languages.typescript);
+  for (const defaults of [ts && ts.javascriptDefaults, ts && ts.typescriptDefaults]) {
+    if (defaults && defaults.setDiagnosticsOptions) {
+      defaults.setDiagnosticsOptions({ noSemanticValidation: true, noSyntaxValidation: false });
+    }
+  }
+
   // Nginx: a primeira palavra de cada instrução é a diretiva; ";" e "{" encerram.
   monaco.languages.register({ id: 'nginx', aliases: ['Nginx'] });
   monaco.languages.setLanguageConfiguration('nginx', {
@@ -451,7 +460,6 @@ Clique para copiar o caminho`;
     this.model.detectIndentation(true, 4);
     if (eol === 'CRLF') this.model.setEOL(monaco.editor.EndOfLineSequence.CRLF);
     this.savedVersion = this.model.getAlternativeVersionId();
-    this.serverText = content;
 
     this.editorHost = el('div', 'ed-monaco');
     this.body.appendChild(this.editorHost);
@@ -546,7 +554,7 @@ Clique para copiar o caminho`;
     if (!this.model || !this.editor) return;
     const pos = this.editor.getPosition();
     const sel = this.editor.getSelection();
-    const selected = sel && !sel.isEmpty() ? this.model.getValueInRange(sel).length : 0;
+    const selected = sel && !sel.isEmpty() ? this.model.getValueLengthInRange(sel) : 0;
     this.cursorEl.textContent = `Ln ${pos ? pos.lineNumber : 1}, Col ${pos ? pos.column : 1}` + (selected ? ` (${selected} selecionados)` : '');
     const opts = this.model.getOptions();
     this.indentEl.textContent = opts.insertSpaces ? `Espaços: ${opts.indentSize || opts.tabSize}` : `Tabulação: ${opts.tabSize}`;
@@ -577,7 +585,6 @@ Clique para copiar o caminho`;
     if (msg.ok) {
       // Só marca como salvo o que foi enviado (o usuário pode ter digitado durante o envio).
       this.savedVersion = this.savingVersion;
-      this.serverText = null;
       this.updateDirty();
       this.renderStatus({ text: msg.message || 'Salvo' });
     } else {
@@ -607,13 +614,13 @@ Clique para copiar o caminho`;
   }
 
   requestCompare() {
-    if (this.orphaned) return;
+    if (this.orphaned || !this.model) return; // editor ainda carregando
     this.renderStatus({ text: 'Buscando a versão do servidor…' });
     send({ type: 'editorCompare', id: this.id });
   }
 
   async requestReload() {
-    if (this.orphaned) return;
+    if (this.orphaned || !this.model) return;
     if (this.dirty) {
       const ok = await confirmDialog({
         title: 'Recarregar do servidor?',
@@ -630,6 +637,7 @@ Clique para copiar o caminho`;
   }
 
   onReloaded(msg) {
+    if (!this.model) return;
     this.closeDiff();
     this.hideBanner();
     // pushEditOperations mantém o desfazer (Ctrl+Z volta ao texto anterior).
@@ -643,6 +651,7 @@ Clique para copiar o caminho`;
   // Lado a lado: servidor (esquerda, só leitura) x o que está no editor (direita, editável).
   onCompare(msg) {
     const monaco = window.monaco;
+    if (!this.model || !monaco) return;
     this.closeDiff();
     this.renderStatus({ text: '' });
     if (msg.content === this.model.getValue()) {
@@ -881,7 +890,14 @@ function focusedEditorPane() {
   return active && active.kind === 'editor' ? active : null;
 }
 
+// Os atalhos do Monaco são globais (valem para todos os editores) e addCommand nunca os remove:
+// registrar a cada editor aberto acumulava atalhos mortos. Registra uma vez; os comandos acham o
+// editor certo por focusedEditorPane().
+let editorKeysRegistered = false;
+
 function registerEditorKeys(monaco, editor) {
+  if (editorKeysRegistered) return;
+  editorKeysRegistered = true;
   const K = monaco.KeyMod;
   const C = monaco.KeyCode;
   const onPane = (fn) => () => {

@@ -123,19 +123,32 @@ public sealed class SettingsStore
         _path = path;
     }
 
+    private static readonly object Gate = new();
+
     public AppSettings Load()
     {
         try
         {
             if (File.Exists(_path))
             {
-                using var stream = File.OpenRead(_path);
-                return JsonSerializer.Deserialize<AppSettings>(stream, SessionStore.JsonOptions) ?? new AppSettings();
+                return Read(_path);
             }
         }
         catch (JsonException)
         {
-            // Preferências inválidas não impedem o uso; o arquivo é regravado no próximo Save.
+            // Arquivo inválido (ex.: desligou no meio da gravação): guarda para análise e usa o backup.
+            // Sem isso, o próximo Save apagaria "Meus comandos", favoritos etc. de vez.
+            TryMove(_path, _path + ".bad");
+            try
+            {
+                if (File.Exists(_path + ".bak"))
+                {
+                    return Read(_path + ".bak");
+                }
+            }
+            catch (Exception ex) when (ex is JsonException or IOException)
+            {
+            }
         }
         catch (IOException)
         {
@@ -144,11 +157,44 @@ public sealed class SettingsStore
         return new AppSettings();
     }
 
+    /// <summary>Gravação atômica: temporário com flush no disco, depois troca mantendo a versão anterior em .bak.</summary>
     public void Save(AppSettings settings)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-        var temp = _path + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(settings, SessionStore.JsonOptions));
-        File.Move(temp, _path, overwrite: true);
+        lock (Gate)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+            var temp = _path + ".tmp";
+            using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                JsonSerializer.Serialize(stream, settings, SessionStore.JsonOptions);
+                stream.Flush(flushToDisk: true);
+            }
+
+            if (File.Exists(_path))
+            {
+                File.Replace(temp, _path, _path + ".bak", ignoreMetadataErrors: true);
+            }
+            else
+            {
+                File.Move(temp, _path);
+            }
+        }
+    }
+
+    private static AppSettings Read(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return JsonSerializer.Deserialize<AppSettings>(stream, SessionStore.JsonOptions) ?? new AppSettings();
+    }
+
+    private static void TryMove(string from, string to)
+    {
+        try
+        {
+            File.Move(from, to, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 }

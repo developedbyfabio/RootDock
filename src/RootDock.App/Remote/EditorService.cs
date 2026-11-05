@@ -262,6 +262,14 @@ public sealed class EditorService
         }
     }
 
+    /// <summary>A página foi recarregada após uma falha: os editores dela não existem mais.</summary>
+    public int ForgetAll()
+    {
+        var count = _documents.Count;
+        _documents.Clear();
+        return count;
+    }
+
     /// <summary>Grava o texto do editor num arquivo do computador (mesma codificação do original).</summary>
     public void SaveLocalCopy(string id, string name, string text)
     {

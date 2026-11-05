@@ -52,6 +52,10 @@ public sealed class FtpFileSystem : IFileTransport
 {
     private readonly AsyncFtpClient _client;
     private readonly SemaphoreSlim _gate = new(1, 1); // uma operação por vez no canal de controle
+    private readonly CancellationTokenSource _life = new();
+    private int _active;
+    private int _disposed;
+    private int _clientDisposed;
 
     private FtpFileSystem(AsyncFtpClient client, string home, FtpSecurity security)
     {
@@ -135,14 +139,31 @@ public sealed class FtpFileSystem : IFileTransport
 
     private async Task<T> Run<T>(Func<Task<T>> action, CancellationToken ct)
     {
-        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _life.Token))
+        {
+            try
+            {
+                await _gate.WaitAsync(linked.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (_life.IsCancellationRequested && !ct.IsCancellationRequested)
+            {
+                throw new ObjectDisposedException(nameof(FtpFileSystem), "A conexão FTP foi fechada.");
+            }
+        }
+
+        Interlocked.Increment(ref _active);
         try
         {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
             return await action().ConfigureAwait(false);
         }
         finally
         {
             _gate.Release();
+            if (Interlocked.Decrement(ref _active) == 0 && Volatile.Read(ref _disposed) != 0)
+            {
+                DisposeClient(); // fechado durante a operação: descarta agora que ela terminou
+            }
         }
     }
 
@@ -176,6 +197,17 @@ public sealed class FtpFileSystem : IFileTransport
         try
         {
             var resumeFrom = resume && File.Exists(temp) ? new FileInfo(temp).Length : 0;
+            if (resumeFrom > 0)
+            {
+                // Como no SFTP e no SMB: se o arquivo do servidor mudou (ficou menor ou igual ao
+                // parcial), o parcial não serve mais e o download recomeça do zero.
+                var remoteSize = await _client.GetFileSize(remotePath, -1, ct).ConfigureAwait(false);
+                if (remoteSize < 0 || resumeFrom >= remoteSize)
+                {
+                    resumeFrom = 0;
+                }
+            }
+
             await using (var stream = new FileStream(temp, resumeFrom > 0 ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16, useAsync: true))
             {
                 var report = progress is null ? null : new Progress<FtpProgress>(p => progress.Report(p.TransferredBytes + resumeFrom));
@@ -235,9 +267,30 @@ public sealed class FtpFileSystem : IFileTransport
         0,
         0);
 
+    /// <summary>
+    /// Fechar com operação em andamento: quem espera na fila é liberado na hora (cancelado), a
+    /// operação em curso termina e só então o cliente é descartado. Antes, descartar o cliente e o
+    /// semáforo no meio quebrava o download, escondia o erro real e deixava a fila presa para sempre.
+    /// </summary>
     public void Dispose()
     {
-        _client.Dispose();
-        _gate.Dispose();
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        _life.Cancel();
+        if (Volatile.Read(ref _active) == 0)
+        {
+            DisposeClient();
+        }
+    }
+
+    private void DisposeClient()
+    {
+        if (Interlocked.Exchange(ref _clientDisposed, 1) == 0)
+        {
+            _client.Dispose();
+        }
     }
 }

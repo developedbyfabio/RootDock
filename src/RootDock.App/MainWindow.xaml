@@ -161,7 +161,12 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Virtualizada: com milhares de sessões só existem os itens visíveis na tela -->
                 <TreeView x:Name="SessionTree"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          VirtualizingPanel.ScrollUnit="Pixel"
+                          ScrollViewer.CanContentScroll="True"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                           Background="Transparent"
                           BorderThickness="0"
@@ -177,6 +182,11 @@
                           DragOver="OnTreeDragOver"
                           DragLeave="OnTreeDragLeave"
                           Drop="OnTreeDrop">
+                    <TreeView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel IsItemsHost="True" />
+                        </ItemsPanelTemplate>
+                    </TreeView.ItemsPanel>
                     <TreeView.Resources>
                         <views:NotEmptyVisibilityConverter x:Key="TreeNotEmpty" />
 
@@ -291,6 +301,13 @@
                             <Setter Property="Foreground" Value="{DynamicResource RdText}" />
                             <Setter Property="FontSize" Value="13.5" />
                             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                            <Setter Property="ItemsPanel">
+                                <Setter.Value>
+                                    <ItemsPanelTemplate>
+                                        <VirtualizingStackPanel IsItemsHost="True" />
+                                    </ItemsPanelTemplate>
+                                </Setter.Value>
+                            </Setter>
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="TreeViewItem">
