@@ -29,6 +29,7 @@ public partial class MainWindow
     private bool _startupSettled;
     private string? _promptedVersion;
     private DispatcherTimer? _promptRetry;
+    private string? _promptWaitReason;
 
     /// <summary>Fim da abertura (página pronta, importação e avisos): já dá para perguntar sobre atualização.</summary>
     private void StartupSettled()
@@ -50,24 +51,57 @@ public partial class MainWindow
             return;
         }
 
-        if (!_startupSettled || !IsActive || WindowState == WindowState.Minimized || OwnedWindows.Count > 0)
+        var wait = !_startupSettled ? "abertura em andamento"
+            : WindowState == WindowState.Minimized ? "janela minimizada"
+            : OwnedWindows.Count > 0 ? "outra janela do RootDock aberta"
+            : !IsForeground() ? "RootDock fora do primeiro plano"
+            : null;
+        if (wait is not null)
         {
+            if (wait != _promptWaitReason)
+            {
+                _promptWaitReason = wait;
+                Log.Info($"Atualização {version} pronta; a pergunta espera: {wait}.");
+            }
+
             _promptRetry ??= new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Background, (_, _) => PromptUpdate(), Dispatcher);
             _promptRetry.Start();
             return;
         }
 
         _promptRetry?.Stop();
+        _promptWaitReason = null;
         _promptedVersion = version;
+        Log.Info($"Perguntando se atualiza para {version}.");
         if (UpdatePromptWindow.Ask(this, updates, _workspace.OpenCount))
         {
+            Log.Info("Escolheu atualizar agora.");
             RestartForUpdate();
         }
         else
         {
+            Log.Info("Escolheu atualizar depois.");
             Notify($"Ok. A versão {version} será instalada quando você fechar o RootDock (ou clique em \"Reiniciar para atualizar\").", false);
         }
     }
+
+    /// <summary>
+    /// RootDock em primeiro plano, perguntando ao Windows. O IsActive do WPF fica falso quando o foco
+    /// está na área dos terminais (WebView2, uma janela de outro processo dentro desta), e a
+    /// pergunta esperava para sempre.
+    /// </summary>
+    private bool IsForeground()
+    {
+        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        var foreground = GetForegroundWindow();
+        return hwnd != IntPtr.Zero && foreground != IntPtr.Zero && (foreground == hwnd || GetAncestor(foreground, 2 /* GA_ROOT */) == hwnd);
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
 
     /// <summary>
     /// A página dos terminais foi recarregada após uma falha do WebView2: reaplica tema e painel e
