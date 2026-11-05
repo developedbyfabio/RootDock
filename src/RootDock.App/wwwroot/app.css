@@ -259,15 +259,23 @@ body { display: flex; flex-direction: column; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* "safe": em janela baixa o conteúdo começa no topo e rola, em vez de subir por cima das abas. */
+  justify-content: safe center;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-dim) 45%, transparent) transparent;
+  padding: 16px 20px;
   gap: 6px;
   color: var(--text-dim);
 }
 #empty[hidden] { display: none; }
 #empty h1 { margin: 0; color: var(--text); font-weight: 600; font-size: 26px; letter-spacing: .5px; }
-#empty p { margin: 0 0 18px; }
+#empty p { margin: 0 0 18px; max-width: 640px; text-align: center; }
 .shortcuts td { padding: 3px 14px; }
 .shortcuts td:first-child { text-align: right; }
+.shortcuts td:first-child:has(kbd) { white-space: nowrap; } /* atalho nunca quebra no meio; quem quebra é a descrição */
+#empty { container-type: inline-size; }
+@container (max-width: 560px) { .shortcuts td { padding: 3px 5px; } }
 kbd {
   display: inline-block;
   padding: 1px 6px;

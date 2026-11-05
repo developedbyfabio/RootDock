@@ -665,15 +665,7 @@ public partial class MainWindow : FluentWindow
 
     // ------------------------------------------------------------------ importação
 
-    /// <summary>Botão "Importar": MobaXterm ou OpenSSH (~/.ssh/config).</summary>
-    private void OnImportMenu(object sender, RoutedEventArgs e)
-    {
-        var menu = new ContextMenu { PlacementTarget = (UIElement)sender, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
-        menu.Items.Add(MenuItem("Do MobaXterm (MobaXterm.ini)...", () => _ = ImportMobaXtermAsync()));
-        menu.Items.Add(MenuItem("Do OpenSSH (~/.ssh/config)...", () => _ = ImportSshConfigAsync()));
-        menu.IsOpen = true;
-    }
-
+    // Menu Ferramentas → Importar sessões: MobaXterm ou OpenSSH (~/.ssh/config).
     private async Task ImportSshConfigAsync()
     {
         if (!EnsureWritable())
@@ -1035,6 +1027,11 @@ public partial class MainWindow : FluentWindow
         {
             // Como no MobaXterm: ao conectar, mostra os arquivos do servidor.
             FilesTab.IsChecked = true;
+        }
+        else if (session is null && _workspace.ActivePaneId is null && FilesTab.IsChecked == true)
+        {
+            // Fechou a última aba: não há mais arquivos para mostrar, volta para a lista de sessões.
+            SessionsTab.IsChecked = true;
         }
 
         if (FilesView.IsVisible)

@@ -72,12 +72,6 @@ public partial class MainWindow
         yield return shells;
         yield return new Separator();
 
-        var import = new MenuItem { Header = "Importar sessões" };
-        import.Items.Add(Command("Do MobaXterm (MobaXterm.ini)...", () => _ = ImportMobaXtermAsync()));
-        import.Items.Add(Command("Do OpenSSH (~/.ssh/config)...", () => _ = ImportSshConfigAsync()));
-        yield return import;
-        yield return new Separator();
-
         yield return Command("Arquivos do servidor (lado a lado)", OpenActiveServerFiles, enabled: CanOpenActiveServerFiles);
         var save = new MenuItem { Header = "Salvar o conteúdo do terminal", IsEnabled = ActiveTerminal is not null };
         save.Items.Add(Command("Como texto (.txt)", () => PageCommand("export", "txt")));
@@ -167,11 +161,17 @@ public partial class MainWindow
 
     private IEnumerable<object> ToolsMenu()
     {
-        yield return Command("Ferramentas de rede (ping, DNS, portas, SSL...)", () => OpenNetworkTools());
+        var import = new MenuItem { Header = "Importar sessões" };
+        import.Items.Add(Command("Do MobaXterm (MobaXterm.ini)...", () => _ = ImportMobaXtermAsync()));
+        import.Items.Add(Command("Do OpenSSH (~/.ssh/config)...", () => _ = ImportSshConfigAsync()));
+        yield return import;
+        yield return new Separator();
+        yield return Command("Chave SSH deste computador...", () => SshKeyWindow.ShowFor(this));
         yield return Command("Executar em vários servidores...", () => OpenMultiExec(PickedEntries()));
+        yield return new Separator();
+        yield return Command("Ferramentas de rede (ping, DNS, portas, SSL...)", () => OpenNetworkTools());
         yield return Command("Histórico de comandos...", OpenHistory, "Ctrl+Shift+H");
         yield return Command("Gravações de terminal...", () => RecordingsWindow.ShowFor(this, _workspace.RecordingsDirectory!, _workspace));
-        yield return Command("Chave SSH deste computador...", () => SshKeyWindow.ShowFor(this));
         yield return new Separator();
         yield return Command("Aparência do terminal...", OpenTerminalSettings);
         yield return new Separator();

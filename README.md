@@ -97,12 +97,12 @@ O ícone do programa vem de `icone.png` (raiz). Ao trocá-lo, gere de novo `src/
 - Seleção múltipla: Ctrl+clique alterna, Shift+clique pega o intervalo, Ctrl+A todas as visíveis. Com várias marcadas: Del exclui, Enter abre (uma aba cada), arrastar move, botão direito tem "Abrir juntas na mesma tela" (grade), "Mover para" e "Excluir". Exclusões também se desfazem com Ctrl+Z (sem as senhas salvas).
 - Sem duplicatas: "Nova sessão" com a mesma conexão de uma existente (servidor, porta, usuário, chave, ambiente, comando inicial) usa a existente. No menu de uma sessão repetida aparece "Excluir as cópias repetidas desta sessão".
 - Importação do `MobaXterm.ini` (sessões SSH, pastas, usuário, porta, chave privada), oferecida na primeira execução.
-- Importação do `~/.ssh/config` (botão Importar → OpenSSH): cada `Host` vira uma sessão com HostName, User, Port, IdentityFile e ProxyJump (ligado ao bastion quando ele também está no arquivo); `Host *` vale como padrão, `Include` é seguido, `Match` é ignorado com aviso.
+- Importação do `~/.ssh/config` (Ferramentas → Importar sessões → OpenSSH): cada `Host` vira uma sessão com HostName, User, Port, IdentityFile e ProxyJump (ligado ao bastion quando ele também está no arquivo); `Host *` vale como padrão, `Include` é seguido, `Match` é ignorado com aviso.
 - SSH com senha, chave (OpenSSH/PuTTY), keyboard-interactive/2FA; verificação da chave do servidor; reconexão com Enter.
 - Vários logins por sessão (botão direito → "Logins salvos"): adicionar, trocar senha, definir o padrão, remover, parar de usar a chave SSH. Senhas só no Cofre do Windows. Ao abrir uma sessão com logins salvos, o terminal lista as opções (Enter = padrão, número, nome, ou "Outro usuário"); dá para desligar a pergunta por sessão. Dividir a tela reaproveita o login do painel original.
 - Login no próprio terminal, como no MobaXterm/PuTTY: sessão (ou conexão rápida) só com o IP pede "Usuário:" e "Senha de usuario@host:" na tela; senha errada mostra "Acesso negado" e pergunta de novo; Ctrl+C cancela; colar funciona. Depois de entrar, um cartão no canto oferece lembrar usuário e senha (cofre do Windows).
 - Senha salva no Cofre do Windows (opcional), apagada sozinha se deixar de funcionar.
-- Chave SSH (botão "Chave SSH"): mostra a chave deste computador ou cria uma Ed25519 em `%USERPROFILE%\.ssh\id_ed25519` (formato OpenSSH, só o usuário tem acesso ao arquivo; nunca substitui uma chave existente).
+- Chave SSH (Ferramentas → Chave SSH deste computador): mostra a chave deste computador ou cria uma Ed25519 em `%USERPROFILE%\.ssh\id_ed25519` (formato OpenSSH, só o usuário tem acesso ao arquivo; nunca substitui uma chave existente).
 - "Instalar minha chave SSH" (botão direito numa sessão, ou em várias): adiciona a chave pública ao `~/.ssh/authorized_keys` do servidor pela conexão do terminal (sem duplicar, sem mexer nas linhas existentes, com SELinux), testa o login só com a chave e, se funcionar, a sessão passa a entrar sem senha.
 - Terminal local: Windows PowerShell, PowerShell 7, CMD, WSL e Git Bash (ConPTY, sem Cygwin).
 - Abas (arrastar para reordenar), divisão lateral e vertical, foco com Alt+setas, busca no histórico.
@@ -209,7 +209,7 @@ O ícone do programa vem de `icone.png` (raiz). Ao trocá-lo, gere de novo `src/
 
 ### Executar em vários servidores (MultiExec)
 
-- Botão **Executar em vários** (ou botão direito numa pasta / em várias sessões marcadas). Escolha os servidores (filtro por nome, IP, empresa ou #tag; "Abertos agora"), escreva o comando (várias linhas viram script) e execute.
+- **Ferramentas → Executar em vários servidores** (ou botão direito numa pasta / em várias sessões marcadas). Escolha os servidores (filtro por nome, IP, empresa ou #tag; "Abertos agora"), escreva o comando (várias linhas viram script) e execute.
 - Resultado individual por servidor: situação (OK, erro com código, sem conexão, tempo esgotado, cancelado), tempo, primeira linha da saída e a saída completa (stdout e stderr) ao clicar.
 - Lotes (quantos ao mesmo tempo), intervalo entre servidores (deploy escalonado), tempo limite, "parar no primeiro erro" e **Cancelar execução**.
 - Usa a conexão do terminal aberto quando houver; senão, o login salvo da sessão (senha do cofre, chave ou agente), sem perguntar nada no meio. Campo opcional de senha para os que não têm senha salva (não é gravada).

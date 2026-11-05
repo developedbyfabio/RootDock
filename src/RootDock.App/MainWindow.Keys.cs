@@ -16,30 +16,6 @@ namespace RootDock.App;
 /// </summary>
 public partial class MainWindow
 {
-    private void OnSshKey(object sender, RoutedEventArgs e) => SshKeyWindow.ShowFor(this);
-
-    private void OnMultiExec(object sender, RoutedEventArgs e) => OpenMultiExec(PickedEntries());
-
-    /// <summary>Menu "Ferramentas" da barra.</summary>
-    private void OnToolsMenu(object sender, RoutedEventArgs e)
-    {
-        var menu = new System.Windows.Controls.ContextMenu { PlacementTarget = ToolsButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
-        foreach (var item in ToolsMenuItems())
-        {
-            menu.Items.Add(item);
-        }
-
-        menu.IsOpen = true;
-    }
-
-    private IEnumerable<object> ToolsMenuItems()
-    {
-        yield return MenuItem("Ferramentas de rede (ping, DNS, portas, SSL...)", () => OpenNetworkTools());
-        yield return MenuItem("Histórico de comandos...", OpenHistory, "Ctrl+Shift+H");
-        yield return MenuItem("Gravações de terminal...", () => RecordingsWindow.ShowFor(this, _workspace.RecordingsDirectory!, _workspace));
-        yield return MenuItem("Aparência do terminal...", OpenTerminalSettings);
-    }
-
     private void OpenNetworkTools(string? tool = null, string? host = null) =>
         NetworkToolsWindow.ShowFor(this, ActiveHost, tool, host);
 

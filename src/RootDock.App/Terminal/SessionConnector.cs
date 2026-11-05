@@ -152,9 +152,15 @@ public sealed class SessionConnector
 
             username = entry.Username?.Trim();
             var logins = saved ? TryVault<IReadOnlyList<SavedLogin>>(() => _logins.List(entry), []) : [];
-            if (logins.Count > 0 && entry.ChooseLoginOnConnect)
+            // Menu só com mais de um login salvo (igual ao RDP e ao FTP): com um só, não há o que
+            // escolher e ele entra direto. Outro usuário: Logins salvos ou a conexão rápida (user@host).
+            if (logins.Count > 1 && entry.ChooseLoginOnConnect)
             {
                 username = await ChooseLoginAsync(terminal, entry, logins, keyPath is not null, ct);
+            }
+            else if (string.IsNullOrEmpty(username) && logins.Count > 0)
+            {
+                username = (logins.FirstOrDefault(l => l.IsDefault) ?? logins[0]).Username;
             }
 
             while (string.IsNullOrEmpty(username))

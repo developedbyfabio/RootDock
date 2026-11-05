@@ -83,25 +83,27 @@
 
         <!-- Barra de ferramentas -->
         <Border Grid.Row="1" Background="{DynamicResource RdSurface}" BorderBrush="{DynamicResource RdBorder}" BorderThickness="0,0,0,1" Padding="10,6">
-            <DockPanel LastChildFill="False">
-                <ui:Button DockPanel.Dock="Left" Content="Nova sessão" Click="OnNewSession" Margin="0,0,6,0"
-                           Icon="{ui:SymbolIcon Add24}" ToolTip="Criar uma sessão SSH salva" />
-                <ui:Button DockPanel.Dock="Left" x:Name="LocalShellButton" Content="Terminal local" Click="OnLocalShellMenu" Margin="0,0,6,0"
-                           Icon="{ui:SymbolIcon WindowConsole20}" ToolTip="PowerShell, CMD, WSL... (Ctrl+Shift+T)" />
-                <ui:Button DockPanel.Dock="Left" Content="Importar" Click="OnImportMenu" Margin="0,0,6,0"
-                           Icon="{ui:SymbolIcon ArrowImport24}" ToolTip="Traz sessões do MobaXterm (MobaXterm.ini) ou do OpenSSH (~/.ssh/config)" />
-                <ui:Button DockPanel.Dock="Left" Content="Chave SSH" Click="OnSshKey" Margin="0,0,6,0"
-                           Icon="{ui:SymbolIcon Key20}" ToolTip="Ver ou criar a chave SSH deste computador (entrar nos servidores sem senha)" />
-                <ui:Button DockPanel.Dock="Left" Content="Executar em vários" Click="OnMultiExec" Margin="0,0,6,0"
-                           Icon="{ui:SymbolIcon ServerMultiple20}" ToolTip="Rodar o mesmo comando em vários servidores ao mesmo tempo, com o resultado de cada um" />
-                <ui:Button DockPanel.Dock="Left" x:Name="ToolsButton" Content="Ferramentas" Click="OnToolsMenu"
-                           Icon="{ui:SymbolIcon Toolbox20}" ToolTip="Rede (ping, DNS, portas...), histórico de comandos e aparência do terminal" />
-
-                <ui:Button DockPanel.Dock="Right" Content="Conectar" Appearance="Primary" Click="OnQuickConnect" Margin="6,0,0,0" />
-                <ui:TextBox DockPanel.Dock="Right" x:Name="QuickConnectBox" Width="280"
-                            PlaceholderText="IP ou usuario@host:porta" ToolTip="Conexão rápida (Ctrl+Shift+K): só o IP pede usuário e senha no terminal"
-                            Icon="{ui:SymbolIcon PlugConnected24}" KeyDown="OnQuickConnectKey" />
-            </DockPanel>
+            <!-- Conexão rápida no centro da janela (colunas laterais iguais). Em janela estreita a coluna
+                 da esquerda não encolhe abaixo dos botões: a conexão rápida desliza para a direita. -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MinWidth="{Binding ActualWidth, ElementName=ToolbarLeft}" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <StackPanel x:Name="ToolbarLeft" Orientation="Horizontal" HorizontalAlignment="Left">
+                    <ui:Button Content="Nova sessão" Click="OnNewSession" Margin="0,0,6,0"
+                               Icon="{ui:SymbolIcon Add24}" ToolTip="Criar uma sessão SSH salva" />
+                    <ui:Button x:Name="LocalShellButton" Content="Terminal local" Click="OnLocalShellMenu" Margin="0,0,12,0"
+                               Icon="{ui:SymbolIcon WindowConsole20}" ToolTip="PowerShell, CMD, WSL... (Ctrl+Shift+T)" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <ui:TextBox x:Name="QuickConnectBox" Width="280"
+                                PlaceholderText="IP ou usuario@host:porta" ToolTip="Conexão rápida (Ctrl+Shift+K): só o IP pede usuário e senha no terminal"
+                                Icon="{ui:SymbolIcon PlugConnected24}" KeyDown="OnQuickConnectKey" />
+                    <ui:Button Content="Conectar" Appearance="Primary" Click="OnQuickConnect" Margin="6,0,0,0" />
+                </StackPanel>
+            </Grid>
         </Border>
 
         <Grid Grid.Row="2">

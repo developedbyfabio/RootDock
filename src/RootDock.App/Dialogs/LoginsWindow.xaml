@@ -48,7 +48,7 @@
             <TextBlock x:Name="FormError" Margin="0,6,0,0" Foreground="{DynamicResource RdProd}" Visibility="Collapsed" />
 
             <CheckBox x:Name="ChooseBox" Margin="0,16,0,0" Click="OnChooseChanged"
-                      Content="Perguntar qual login usar ao abrir a sessão (Enter escolhe o padrão)" />
+                      Content="Com mais de um login salvo, perguntar qual usar ao abrir a sessão (Enter escolhe o padrão)" />
 
             <!-- Chave SSH -->
             <Border Margin="0,14,0,0" Padding="12,10" CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource RdBorder}">
