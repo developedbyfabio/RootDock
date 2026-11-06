@@ -44,6 +44,7 @@ function applySettings(msg) {
     pane.scheduleFit();
   }
   if (msg.fontSize && msg.fontSize !== settings.fontSize) setFontSize(msg.fontSize);
+  if (msg.screensaver && typeof Screensaver !== 'undefined') Screensaver.configure(msg.screensaver);
 }
 
 // ------------------------------------------------ Destaque de ERROR / WARNING / OK

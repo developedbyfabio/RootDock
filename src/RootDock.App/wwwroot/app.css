@@ -156,6 +156,9 @@ body { display: flex; flex-direction: column; }
 .pane.env-Staging { --cmd: var(--staging); }
 .pane-term { position: absolute; inset: 0; }
 .pane .xterm { position: absolute; inset: 0; padding: 4px 0 0 8px; }
+/* Proteção de tela (screensaver.js): por cima do texto e dos destaques do xterm (até 8), abaixo da busca (10). */
+.pane-term > canvas.saver { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 9; pointer-events: none; transition: none; }
+.pane-term > canvas.saver[hidden] { display: none; }
 
 /* Cabeçalho de cada painel (só com a tela dividida) */
 .pane-head {

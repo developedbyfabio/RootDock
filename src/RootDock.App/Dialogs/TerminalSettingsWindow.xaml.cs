@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
 using RootDock.App.Services;
 using RootDock.Core.Settings;
@@ -13,6 +14,7 @@ namespace RootDock.App.Dialogs;
 public partial class TerminalSettingsWindow : FluentWindow
 {
     private readonly int _initialSize;
+    private readonly Action<string>? _previewSaver;
     private bool _ready;
 
     /// <summary>Item da lista de temas (cores prontas para a tela).</summary>
@@ -31,10 +33,20 @@ public partial class TerminalSettingsWindow : FluentWindow
 
     public int ResultFontSize { get; private set; }
 
-    private TerminalSettingsWindow(TerminalAppearance current, int fontSize)
+    // Abaixo desta largura, a prévia e a proteção de tela descem para baixo das opções (uma coluna só).
+    private const double TwoColumnsMinWidth = 860;
+
+    private bool? _singleColumn;
+
+    private TerminalSettingsWindow(TerminalAppearance current, int fontSize, Action<string>? previewSaver)
     {
         InitializeComponent();
+        // Tela pequena: a janela cabe na área útil e o meio rola; título e botões ficam sempre à vista.
+        DialogCentering.FitToWorkArea(this);
+        DialogCentering.KeepCentered(this);
+        SourceInitialized += (_, _) => ApplyColumns(Math.Min(Width, MaxWidth));
         _initialSize = fontSize;
+        _previewSaver = previewSaver;
         ThemesList.ItemsSource = TerminalThemes.All.Select(t => new ThemeItem(t)).ToList();
         var installed = Fonts.SystemFontFamilies.Select(f => f.Source).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var fonts = TerminalThemes.MonospaceFonts.Where(installed.Contains).ToList();
@@ -50,12 +62,47 @@ public partial class TerminalSettingsWindow : FluentWindow
         UpdatePreview();
     }
 
-    /// <summary>Mostra a janela; null se cancelada.</summary>
-    public static (TerminalAppearance Appearance, int FontSize)? Edit(Window owner, TerminalAppearance current, int fontSize)
+    /// <summary>Mostra a janela; null se cancelada. previewSaver mostra a cena (id) no terminal ativo.</summary>
+    public static (TerminalAppearance Appearance, int FontSize)? Edit(Window owner, TerminalAppearance current, int fontSize, Action<string>? previewSaver = null)
     {
-        var dialog = new TerminalSettingsWindow(current, fontSize) { Owner = owner };
+        var dialog = new TerminalSettingsWindow(current, fontSize, previewSaver) { Owner = owner };
         return dialog.ShowDialog() == true ? (dialog.Result, dialog.ResultFontSize) : null;
     }
+
+    private void OnWindowSizeChanged(object sender, SizeChangedEventArgs e) => ApplyColumns(e.NewSize.Width);
+
+    private void ApplyColumns(double width)
+    {
+        var single = width < TwoColumnsMinWidth;
+        if (single == _singleColumn)
+        {
+            return;
+        }
+
+        _singleColumn = single;
+        GapColumn.Width = new GridLength(single ? 0 : 20);
+        SideColumn.Width = new GridLength(single ? 0 : 340);
+        Grid.SetRow(SidePanel, single ? 1 : 0);
+        Grid.SetColumn(SidePanel, single ? 0 : 2);
+        SidePanel.Margin = new Thickness(0, single ? 18 : 0, 0, 0);
+        SaverLabelColumn.Width = new GridLength(single ? 150 : 80); // em uma coluna, alinha com "Fonte", "Tamanho"...
+    }
+
+    // A lista de cores mostra todos os itens (não rola sozinha): a roda do mouse sobre ela rola a janela.
+    private void OnListWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (e.Handled)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        BodyScroll.RaiseEvent(new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta) { RoutedEvent = MouseWheelEvent, Source = sender });
+    }
+
+    // Linha acima dos botões só quando há conteúdo escondido rolando por trás deles.
+    private void OnBodyScrollChanged(object sender, ScrollChangedEventArgs e) =>
+        Footer.BorderThickness = new Thickness(0, BodyScroll.ScrollableHeight > 0 ? 1 : 0, 0, 0);
 
     private void Load(TerminalAppearance a, int fontSize)
     {
@@ -70,7 +117,18 @@ public partial class TerminalSettingsWindow : FluentWindow
         HighlightBox.IsChecked = a.Highlight;
         CopyOnSelectBox.IsChecked = a.CopyOnSelect;
         RightClickBox.IsChecked = a.RightClickPaste;
+        SaverBox.IsChecked = a.Screensaver;
+        SaverMinutesBox.Value = Math.Clamp(a.ScreensaverMinutes, TerminalThemes.ScreensaverMinMinutes, TerminalThemes.ScreensaverMaxMinutes);
+        SaverSceneBox.SelectedItem = SaverSceneBox.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == a.ScreensaverScene)
+            ?? SaverSceneBox.Items[0];
+        SaverOptions.IsEnabled = a.Screensaver;
     }
+
+    private string SelectedScene => (SaverSceneBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "random";
+
+    private void OnSaverToggled(object sender, RoutedEventArgs e) => SaverOptions.IsEnabled = SaverBox.IsChecked == true;
+
+    private void OnSaverPreview(object sender, RoutedEventArgs e) => _previewSaver?.Invoke(SelectedScene);
 
     private static void SelectByTag(ComboBox box, string tag) =>
         box.SelectedItem = box.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == tag) ?? box.Items[1];
@@ -86,6 +144,9 @@ public partial class TerminalSettingsWindow : FluentWindow
         Highlight = HighlightBox.IsChecked == true,
         CopyOnSelect = CopyOnSelectBox.IsChecked == true,
         RightClickPaste = RightClickBox.IsChecked == true,
+        Screensaver = SaverBox.IsChecked == true,
+        ScreensaverMinutes = (int)Math.Clamp(Math.Round(SaverMinutesBox.Value ?? 10), TerminalThemes.ScreensaverMinMinutes, TerminalThemes.ScreensaverMaxMinutes),
+        ScreensaverScene = SelectedScene,
     };
 
     private void OnChanged(object sender, RoutedEventArgs e) => UpdatePreview();

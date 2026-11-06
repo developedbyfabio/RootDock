@@ -93,6 +93,16 @@ public sealed class TerminalAppearance
 
     /// <summary>Botão direito cola (como no PuTTY/MobaXterm); desligado, abre um menu.</summary>
     public bool RightClickPaste { get; set; } = true;
+
+    /// <summary>Animação por cima do terminal parado (o texto continua visível atrás).</summary>
+    public bool Screensaver { get; set; } = true;
+
+    /// <summary>Minutos sem tecla nem mouse num terminal até a animação aparecer nele.</summary>
+    public int ScreensaverMinutes { get; set; } = 10;
+
+    /// <summary>Cena da animação: "random" (uma diferente a cada vez) ou o id de uma cena (turma, chuva, tv).
+    /// Id desconhecido (cena que saiu do app) vira "random" na hora de mostrar.</summary>
+    public string ScreensaverScene { get; set; } = "random";
 }
 
 public sealed class CustomCommand

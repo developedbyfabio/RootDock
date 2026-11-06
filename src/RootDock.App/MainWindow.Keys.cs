@@ -28,7 +28,8 @@ public partial class MainWindow
 
     private void OpenTerminalSettings()
     {
-        if (TerminalSettingsWindow.Edit(this, _settings.Terminal, _settings.FontSize) is not { } result)
+        if (TerminalSettingsWindow.Edit(this, _settings.Terminal, _settings.FontSize,
+                scene => _workspace.Send(new { type = "screensaverPreview", scene })) is not { } result)
         {
             _workspace.FocusTerminal();
             return;

@@ -45,6 +45,44 @@ public static class DialogCentering
         };
     }
 
+    /// <summary>
+    /// A janela nunca fica maior que a área útil do monitor (sem a barra de tarefas): limita largura e altura,
+    /// puxa a janela para dentro da tela ao abrir e refaz o limite se ela for arrastada para outro monitor.
+    /// O conteúdo da janela precisa rolar (ScrollViewer) para caber quando a tela é menor que ele.
+    /// </summary>
+    public static void FitToWorkArea(Window window, double margin = 12)
+    {
+        Rect? limited = null;
+        void Limit(Rect area)
+        {
+            if (limited == area)
+            {
+                return;
+            }
+
+            limited = area;
+            window.MaxWidth = Math.Max(window.MinWidth, area.Width - margin * 2);
+            window.MaxHeight = Math.Max(window.MinHeight, area.Height - margin * 2);
+        }
+
+        // Antes do primeiro desenho: pela tela da janela dona, que é onde o CenterOwner põe o diálogo.
+        window.SourceInitialized += (_, _) => Limit(window.Owner is { IsLoaded: true } owner ? WorkArea(owner) : SystemParameters.WorkArea);
+        window.Loaded += (_, _) =>
+        {
+            var area = WorkArea(window);
+            Limit(area);
+            window.Left = Math.Max(area.Left, Math.Min(window.Left, area.Right - window.ActualWidth));
+            window.Top = Math.Max(area.Top, Math.Min(window.Top, area.Bottom - window.ActualHeight));
+        };
+        window.LocationChanged += (_, _) =>
+        {
+            if (window.IsLoaded && window.WindowState == WindowState.Normal)
+            {
+                Limit(WorkArea(window));
+            }
+        };
+    }
+
     /// <summary>Área útil (sem a barra de tarefas) do monitor onde a janela está, em unidades WPF.</summary>
     private static Rect WorkArea(Window window)
     {

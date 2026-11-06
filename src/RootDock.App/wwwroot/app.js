@@ -1714,7 +1714,7 @@ function onHostMessage(raw) {
       break;
     default:
       if (msg.type === 'restoreOffer') showRestoreOffer(msg.names);
-      else if (!handleEditorMessage(msg) && !handleRdpMessage(msg) && !handleReplayMessage(msg) && !handleVncMessage(msg) && !handleSnapMessage(msg) && !handleThemeMessage(msg)) console.warn('mensagem desconhecida', msg);
+      else if (!handleEditorMessage(msg) && !handleRdpMessage(msg) && !handleReplayMessage(msg) && !handleVncMessage(msg) && !handleSnapMessage(msg) && !handleThemeMessage(msg) && !handleScreensaverMessage(msg)) console.warn('mensagem desconhecida', msg);
   }
 }
 

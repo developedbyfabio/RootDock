@@ -75,7 +75,17 @@ public static class TerminalThemes
         highlight = a.Highlight,
         copyOnSelect = a.CopyOnSelect,
         rightClickPaste = a.RightClickPaste,
+        screensaver = new
+        {
+            enabled = a.Screensaver,
+            minutes = Math.Clamp(a.ScreensaverMinutes, ScreensaverMinMinutes, ScreensaverMaxMinutes),
+            scene = string.IsNullOrWhiteSpace(a.ScreensaverScene) ? "random" : a.ScreensaverScene,
+        },
     };
+
+    public const int ScreensaverMinMinutes = 1;
+
+    public const int ScreensaverMaxMinutes = 240;
 
     private static TerminalTheme Theme(string id, string name, string bg, string fg, string cursor, string selection, string[] normal, string[] bright)
     {
