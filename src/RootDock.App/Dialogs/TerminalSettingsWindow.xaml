@@ -170,9 +170,9 @@
                     </ComboBox>
                 </Grid>
                 <ui:Button Content="Ver agora" Icon="{ui:SymbolIcon Play24}" Click="OnSaverPreview" Margin="0,12,0,0"
-                           ToolTip="Mostra a cena escolhida no terminal ativo. Mexa no terminal para tirar" />
+                           ToolTip="Mostra a cena escolhida no terminal ativo. Clique no terminal para tirar" />
                 <TextBlock Margin="0,8,0,0" Foreground="{DynamicResource RdTextDim}" FontSize="11.5" TextWrapping="Wrap"
-                           Text="Cada terminal conta o próprio tempo. Tecla ou mouse no terminal tiram a animação, e a tecla que acorda não é enviada ao servidor." />
+                           Text="Cada terminal conta o próprio tempo. A animação fica até você clicar no terminal; enquanto ela está na tela, o que for digitado não é enviado ao servidor." />
             </StackPanel>
         </Grid>
         </ScrollViewer>

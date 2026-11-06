@@ -4,8 +4,8 @@
 // usa o próprio texto do terminal. Bichinhos andam por cima das linhas e comem letras, a chuva digital acende
 // o texto, a TV de tubo mostra o terminal com defeito. O texto e as cores vêm do buffer do xterm; o terminal de
 // verdade não muda (letra "comida" é só uma máscara no desenho). Cada terminal conta o próprio tempo: tecla,
-// mouse ou rolagem nele zeram a contagem e tiram a animação, e a tecla que acorda não vai para o servidor (nada
-// de Enter sem querer). Escondido (outra aba), o terminal não conta tempo.
+// mouse ou rolagem nele zeram a contagem. Depois que a animação começa, só um clique no terminal a tira; até lá,
+// nada digitado vai para o servidor (nada de Enter sem querer). Escondido (outra aba), o terminal não conta tempo.
 // Cenas do protótipo screen/RootDock.Screensavers (web/turma.html).
 const Screensaver = (() => {
 const REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -614,26 +614,59 @@ class Saver {
     this.alpha = 0;
     this.scene = null;
     this.canvas = null;
-    const el = pane.el;
-    // Captura: roda antes do xterm. Com a animação na tela, a tecla só acorda e não chega ao servidor.
+    this.pending = null; // cena que estava na tela quando o terminal foi escondido (volta junto com ele)
+    this.typing = false; // tecla apertada com a animação na tela: o que ela digitaria é descartado
+    this.eatUntil = 0;   // o clique que tira a animação não chega ao terminal
+    const el = pane.el, termEl = pane.termEl, used = () => { this.last = performance.now(); };
+
+    // Teclado. Sem animação: é uso, zera a contagem. Com ela na tela: a tecla não a tira e nada do que seria
+    // digitado vai para o servidor (nem colar); atalhos do RootDock (nova aba, dividir, buscar...) continuam.
     el.addEventListener('keydown', (e) => {
-      const showing = (this.phase === 'in' || this.phase === 'on') && this.alpha > .05;
-      this.wake();
-      if (showing) { e.preventDefault(); e.stopImmediatePropagation(); }
+      if (!this.covering()) { used(); return; }
+      if (this.phase === 'in' && this.alpha < .05) { this.dismiss(); return; } // acabou de começar e ainda nem aparece
+      const k = e.key, paste = (e.ctrlKey && !e.altKey && (k === 'v' || k === 'V')) || (e.shiftKey && !e.ctrlKey && k === 'Insert');
+      if (paste) { e.preventDefault(); e.stopImmediatePropagation(); return; }
+      this.typing = true;
     }, true);
-    el.addEventListener('pointermove', (e) => { if (Math.abs(e.movementX) + Math.abs(e.movementY) > 2) this.wake(); }, { passive: true });
-    el.addEventListener('pointerdown', () => this.wake(), true);
-    el.addEventListener('wheel', () => this.wake(), { passive: true, capture: true });
+    el.addEventListener('keyup', () => { this.typing = false; }, true);
+    if (typeof pane.input === 'function') {
+      const input = pane.input.bind(pane);
+      pane.input = (data) => { if (this.typing && this.covering()) return; input(data); };
+    }
+
+    // Mouse. Sem animação: mexer, clicar e rolar são uso. Com ela na tela: só um clique no terminal a tira.
+    el.addEventListener('pointermove', (e) => { if (!this.covering() && Math.abs(e.movementX) + Math.abs(e.movementY) > 2) used(); }, { passive: true });
+    el.addEventListener('wheel', () => { if (!this.covering()) used(); }, { passive: true, capture: true });
+    el.addEventListener('pointerdown', () => { if (!this.covering()) used(); }, true);
+    // O clique que tira a animação não seleciona, não cola (botão direito) e não vira clique no programa
+    // (htop, vim com mouse): o pointerdown e os eventos de mouse que vêm dele param aqui. O foco vai ao terminal.
+    termEl.addEventListener('pointerdown', (e) => {
+      if (!this.covering()) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      this.eatUntil = performance.now() + 2000;
+      this.dismiss();
+      pane.term.focus();
+    }, true);
+    termEl.addEventListener('pointerup', () => { this.eatUntil = Math.min(this.eatUntil, performance.now() + 350); }, true);
+    for (const type of ['mousedown', 'mouseup', 'click', 'dblclick', 'auxclick', 'contextmenu']) {
+      termEl.addEventListener(type, (e) => { if (performance.now() < this.eatUntil) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
+    }
   }
 
   showing() { return this.phase !== 'off'; }
 
+  // Animação entrando ou na tela (não conta a saída).
+  covering() { return this.phase === 'in' || this.phase === 'on'; }
+
   visible() { return !document.hidden && this.pane.termEl.offsetWidth > 0 && this.pane.termEl.offsetHeight > 0; }
 
-  wake() {
+  // Clique no terminal: a animação sai e a contagem recomeça.
+  dismiss() {
     this.last = performance.now();
     this.forced = false;
-    if (this.phase === 'in' || this.phase === 'on') this.phase = 'out';
+    this.pending = null;
+    this.typing = false;
+    if (this.covering()) this.phase = 'out';
   }
 
   start(id) {
@@ -648,6 +681,7 @@ class Saver {
     }
     this.scene = Object.create(proto);
     this.scene.pane = this.pane;
+    this.typing = false;
     this.w = 0; this.h = 0; // força o init no primeiro quadro, já com o tamanho certo
     this.alpha = 0;
     this.canvas.style.opacity = '0';
@@ -724,13 +758,23 @@ setInterval(() => {
   const now = performance.now(), limit = config.minutes * 60_000;
   for (const [pane, s] of savers) {
     if (pane.disposed) { savers.delete(pane); continue; }
-    if (!s.visible()) { if (s.showing()) s.stop(); s.last = now; continue; }
-    if (!config.enabled && !s.forced) { if (s.phase === 'in' || s.phase === 'on') s.phase = 'out'; s.last = now; continue; }
+    // Escondido (outra aba, janela minimizada): para de desenhar, mas a cena volta quando o terminal
+    // reaparecer, porque só o clique no terminal a tira.
+    if (!s.visible()) {
+      if (s.covering() && s.scene) s.pending = { id: s.scene.id, forced: s.forced };
+      if (s.showing()) s.stop();
+      s.last = now; continue;
+    }
+    if (s.pending) {
+      const p = s.pending; s.pending = null;
+      if (config.enabled || p.forced) { s.start(p.id); s.forced = p.forced; continue; }
+    }
+    if (!config.enabled && !s.forced) { if (s.covering()) s.phase = 'out'; s.last = now; continue; }
     if (s.phase === 'off' && now - s.last >= limit) s.start(config.scene);
   }
 }, 1000);
 
-// Voltar à janela minimizada é uso: ninguém quer encontrar a animação ao restaurar.
+// Voltar à janela minimizada é uso: a contagem recomeça (a cena que já estava na tela volta, ver "pending").
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) for (const s of savers.values()) s.last = performance.now();
 });
@@ -751,8 +795,9 @@ function preview(scene) {
   const target = active && active.visible() ? active : visible[0];
   if (!target) return false;
   if (target.showing()) target.stop();
+  target.pending = null;
   target.start(scene || 'random');
-  target.forced = true; // fica até mexer no terminal, mesmo com a proteção desligada
+  target.forced = true; // fica até clicar no terminal, mesmo com a proteção desligada
   return true;
 }
 

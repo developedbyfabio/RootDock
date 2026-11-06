@@ -1547,18 +1547,21 @@ function handleTerminalKey(e, pane) {
   }
 
   if (ctrl && e.shiftKey) {
+    // Tecla tratada aqui fica marcada (preventDefault): o atalho global do documento, mais abaixo, não a repete.
+    // Sem isso Ctrl+Shift+T abria duas abas e Ctrl+Shift+L abria e fechava o painel no mesmo toque.
+    const done = () => { e.preventDefault(); return false; };
     switch (key) {
-      case 'c': { const t = pane.term.getSelection(); if (t) send({ type: 'copy', text: t }); return false; }
-      case 'd': splitActive('v'); return false;
-      case 'e': splitActive('h'); return false;
-      case 'w': closePane(pane); return false;
-      case 't': send({ type: 'newLocal' }); return false;
-      case 'f': openSearch(); return false;
-      case 's': openSnap(pane); return false;
-      case 'k': send({ type: 'command', name: 'quickConnect' }); return false;
-      case 'h': send({ type: 'command', name: 'history' }); return false;
-      case 'l': send({ type: 'toggleCommands' }); return false;
-      case 'Tab': cycleTab(-1); return false;
+      case 'c': { const t = pane.term.getSelection(); if (t) send({ type: 'copy', text: t }); return done(); }
+      case 'd': splitActive('v'); return done();
+      case 'e': splitActive('h'); return done();
+      case 'w': closePane(pane); return done();
+      case 't': send({ type: 'newLocal' }); return done();
+      case 'f': openSearch(); return done();
+      case 's': openSnap(pane); return done();
+      case 'k': send({ type: 'command', name: 'quickConnect' }); return done();
+      case 'h': send({ type: 'command', name: 'history' }); return done();
+      case 'l': send({ type: 'toggleCommands' }); return done();
+      case 'Tab': cycleTab(-1); return done();
       default: break;
     }
   }
@@ -1591,7 +1594,9 @@ function handleTerminalKey(e, pane) {
 }
 
 document.addEventListener('keydown', (e) => {
-  // Atalhos que valem mesmo sem terminal em foco (tela inicial).
+  // Atalhos que valem mesmo sem terminal em foco (tela inicial). Com o terminal em foco, handleTerminalKey
+  // já tratou a tecla e a marcou.
+  if (e.defaultPrevented) return;
   if (e.ctrlKey && e.shiftKey && !e.altKey) {
     const key = e.key.toLowerCase();
     if (key !== 't' && e.target.closest && e.target.closest('.editor-pane')) return;
