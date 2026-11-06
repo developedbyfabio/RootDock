@@ -29,7 +29,10 @@ public partial class FilesPanel : UserControl
         InitializeComponent();
         DataContextChanged += (_, _) => UpdatePlaceholder();
         UpdatePlaceholder();
-        List.Loaded += (_, _) => HookScroller();
+
+        // A rolagem sobe da ScrollViewer interna da lista até ela. Ligar na lista (e não na ScrollViewer no Loaded)
+        // funciona mesmo com o painel começando escondido: o modelo da lista só é montado na primeira vez que aparece.
+        List.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(OnListScrollChanged));
     }
 
     /// <summary>Larguras e colunas visíveis (a janela liga às preferências salvas).</summary>
@@ -54,23 +57,23 @@ public partial class FilesPanel : UserControl
 
     // ------------------------------------------------------------------ cabeçalho e colunas
 
-    private void HookScroller()
+    /// <summary>
+    /// Rolagem, área útil ou largura total da lista mudaram (inclui a primeira vez que a lista aparece e a barra
+    /// vertical surgindo ou sumindo): o cabeçalho acompanha.
+    /// </summary>
+    private void OnListScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        if (_scroller is not null || FindChild<ScrollViewer>(List) is not { } scroller)
+        if (e.OriginalSource is not ScrollViewer scroller)
         {
             return;
         }
 
-        _scroller = scroller;
-        scroller.ScrollChanged += (_, e) =>
+        _scroller ??= FindChild<ScrollViewer>(List);
+        if (ReferenceEquals(scroller, _scroller)
+            && (e.HorizontalChange != 0 || e.ViewportWidthChange != 0 || e.ExtentWidthChange != 0))
         {
-            if (e.HorizontalChange != 0 || e.ViewportWidthChange != 0 || e.ExtentWidthChange != 0)
-            {
-                SyncHeader();
-            }
-        };
-        scroller.SizeChanged += (_, _) => SyncHeader();
-        SyncHeader();
+            SyncHeader();
+        }
     }
 
     /// <summary>

@@ -174,7 +174,7 @@ public partial class MainWindow : FluentWindow
         await Dispatcher.Yield(DispatcherPriority.Background);
         try
         {
-            await _workspace.InitializeAsync(WebViewEnvironment ?? CoreWebView2Environment.CreateAsync(null, _paths.WebViewDirectory), _settings.FontSize,
+            await _workspace.InitializeAsync(WebViewEnvironment ?? WebViewRuntime.CreateAsync(_paths.WebViewDirectory), _settings.FontSize,
                 AppThemes.PageMessage(AppThemes.Get(_settings.AppTheme)));
             _workspace.Send(AppThemes.PageMessage(AppThemes.Get(_settings.AppTheme)));
             _workspace.Send(TerminalThemes.Message(_settings.Terminal, _settings.FontSize));
@@ -185,6 +185,15 @@ public partial class MainWindow : FluentWindow
             await ShowMessage("WebView2 não encontrado",
                 "O RootDock usa o Microsoft Edge WebView2 para desenhar os terminais.\n" +
                 "Instale o \"Evergreen Runtime\" em https://developer.microsoft.com/microsoft-edge/webview2/ e abra o RootDock de novo.");
+            return;
+        }
+        catch (Exception ex) when (WebViewRuntime.IsOptionsMismatch(ex))
+        {
+            // Outra cópia aberta (outra versão) usa a mesma pasta do WebView2 com outras opções.
+            Log.Error("Abrir o WebView2", ex);
+            await ShowMessage("Outra cópia do RootDock está aberta",
+                "Há outra janela do RootDock aberta, de outra versão, e as duas não conseguem dividir a área dos terminais.\n" +
+                "Feche todas as janelas do RootDock e abra de novo.");
             return;
         }
 

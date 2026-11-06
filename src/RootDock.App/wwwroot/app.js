@@ -138,6 +138,13 @@ class Pane {
     });
 
     term.attachCustomKeyEventHandler((e) => handleTerminalKey(e, this));
+    // Colar passa sempre pelo RootDock: uma vez só e com a confirmação de várias linhas em produção.
+    // O colar nativo do navegador (vindo de qualquer atalho ou menu) não chega ao xterm, que colaria de novo.
+    this.termEl.addEventListener('paste', (e) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      requestPaste(this);
+    }, true);
     // Ao receber o foco de volta, o navegador devolve-o ao último terminal focado, mesmo que
     // ele já esteja escondido (outra aba): esse não pode virar o ativo.
     term.textarea.addEventListener('focus', () => {
@@ -1531,10 +1538,17 @@ function handleTerminalKey(e, pane) {
   const ctrl = e.ctrlKey && !e.altKey;
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
 
+  // Ctrl+V, Ctrl+Shift+V e Shift+Insert: o RootDock cola. Cancelar a tecla impede o colar nativo do
+  // navegador (sem isso o texto entrava duas vezes: pelo RootDock e pelo xterm).
+  if ((ctrl && key === 'v') || (e.shiftKey && !e.ctrlKey && !e.altKey && key === 'Insert')) {
+    e.preventDefault();
+    requestPaste(pane);
+    return false;
+  }
+
   if (ctrl && e.shiftKey) {
     switch (key) {
       case 'c': { const t = pane.term.getSelection(); if (t) send({ type: 'copy', text: t }); return false; }
-      case 'v': requestPaste(pane); return false;
       case 'd': splitActive('v'); return false;
       case 'e': splitActive('h'); return false;
       case 'w': closePane(pane); return false;
@@ -1558,7 +1572,6 @@ function handleTerminalKey(e, pane) {
           return false;
         }
         return true;
-      case 'v': requestPaste(pane); return false;
       case 'ArrowUp': return !pane.jumpCommand(-1);
       case 'ArrowDown': return !pane.jumpCommand(1);
       case 'Tab': cycleTab(1); return false;

@@ -73,7 +73,7 @@ public partial class App : Application
     {
         try
         {
-            return Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateAsync(null, userDataFolder);
+            return WebViewRuntime.CreateAsync(userDataFolder);
         }
         catch (Exception ex)
         {
