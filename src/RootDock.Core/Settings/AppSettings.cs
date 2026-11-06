@@ -37,6 +37,15 @@ public sealed class AppSettings
     /// <summary>Comandos cadastrados pelo usuário ("Meus comandos").</summary>
     public List<CustomCommand> CustomCommands { get; set; } = [];
 
+    /// <summary>Sistema dos comandos do painel: "auto" (segue o terminal em foco) ou uma família fixa (debian, rhel, suse, windows).</summary>
+    public string CommandsOs { get; set; } = "auto";
+
+    /// <summary>Colunas do painel de arquivos: larguras, escondidas e ordem.</summary>
+    public Sftp.FileColumnSettings FilesColumns { get; set; } = new();
+
+    /// <summary>Macros (sequências de comandos, pausas e esperas) criadas ou gravadas pelo usuário.</summary>
+    public List<Macros.CommandMacro> Macros { get; set; } = [];
+
     /// <summary>Últimos comandos executados em vários servidores (mais recente primeiro).</summary>
     public List<string> MultiExecHistory { get; set; } = [];
 

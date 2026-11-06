@@ -57,6 +57,16 @@ public static class AppThemes
             new("#6A9955", "#C586C0", "#CE9178", "#B5CEA8", "#9CDCFE", "#4EC9B0", "#569CD6", "#4FC1FF", "#D4D4D4"),
             "grafite", new()),
 
+        // Preto absoluto (bom em telas OLED): fundo, painéis e terminal em #000000; a separação vem de
+        // contornos finos, não de tons de cinza. Texto quase branco e destaque azul vivo, com contraste
+        // AA em tudo (o cinza secundário #8F8F8F dá 6,5:1 sobre o preto).
+        new("black", "Black", "Preto absoluto: fundo e terminal pretos, contornos discretos e texto nítido.", false,
+            new("#000000", "#000000", "#0A0A0A", "#0D0D0D", "#141414", "#1F1F1F", "#1A1A1A", "#232323", "#2E2E2E", "#4D4D4D", "#2F6FE0", "#1A1A1A",
+                "#EDEDED", "#8F8F8F", "#4D94FF", "#0C1E3B", "#000000", "#1D3B6E", "#1C1C1C", "#2A1F05",
+                "#FF5C6C", "#2B0A0F", "#F5B94A", "#5FD38D", "#0A2A17", "#5E5E5E"),
+            new("#6A737D", "#C586C0", "#CE9178", "#B5CEA8", "#9CDCFE", "#4EC9B0", "#569CD6", "#4FC1FF", "#D4D4D4"),
+            "black", new()),
+
         new("meia-noite", "Meia-noite", "Azul profundo com destaques em ciano.", false,
             new("#0B1220", "#0F172A", "#0D1526", "#091020", "#16213A", "#1C2A48", "#1E293B", "#1E293B", "#2A3A5A", "#3B5280", "#38BDF8", "#1E293B",
                 "#E2E8F0", "#94A3B8", "#38BDF8", "#0C3048", "#0B1220", "#123A57", "#1C2A48", "#33280F",

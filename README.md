@@ -125,7 +125,7 @@ O ícone do programa vem de `icone.png` (raiz). Ao trocá-lo, gere de novo `src/
 
 ### Temas (Exibir → Tema)
 
-- **Escuro** (padrão), **Claro**, **Grafite** (estilo VS Code Dark Modern), **Meia-noite**, **Matrix** (preto e verde neon, chuva de caracteres na tela inicial), **Computador antigo (âmbar)** e **Computador antigo (verde)** (fósforo com linhas de tubo, cantos escurecidos e brilho).
+- **Escuro** (padrão), **Claro**, **Grafite** (estilo VS Code Dark Modern), **Black** (preto absoluto na janela e no terminal, bom em telas OLED; a separação vem de contornos finos), **Meia-noite**, **Matrix** (preto e verde neon, chuva de caracteres na tela inicial), **Computador antigo (âmbar)** e **Computador antigo (verde)** (fósforo com linhas de tubo, cantos escurecidos e brilho).
 - O tema muda na hora a janela, os diálogos, os botões, as abas, o editor (cores de sintaxe próprias de cada tema) e o terminal (Matrix, fósforo âmbar, fósforo verde e claro entre os esquemas). **Galeria de temas** com miniatura de cada um; opção de manter as cores atuais do terminal.
 - Implementação: os pincéis `Rd*` são usados com `DynamicResource` em todo o XAML e trocados por `Services/AppThemes.cs` (que também tinge os controles do WPF-UI); a página recebe variáveis CSS e efeitos (`wwwroot/themes.js`).
 
@@ -158,15 +158,31 @@ O ícone do programa vem de `icone.png` (raiz). Ao trocá-lo, gere de novo `src/
 - Duplo clique abre o arquivo no VS Code (ou no programa padrão); cada salvamento é enviado de volta. Avisa se o arquivo mudou no servidor e pede confirmação em produção.
 - Fila de transferências com progresso, velocidade, tempo restante e cancelamento (até 3 simultâneas).
 - Nova pasta, novo arquivo, renomear, permissões (chmod), excluir com confirmação, "ir para esta pasta no terminal".
+- Colunas **Nome, Tamanho, Modificado, Dono, Grupo e Permissões** com cabeçalho sempre visível (como no MobaXterm). Arrastar a divisória do cabeçalho muda a largura; dois cliques nela ajustam a coluna ao maior texto. Com o painel estreito a lista rola para o lado (barra embaixo ou Shift + roda do mouse) e o cabeçalho acompanha.
+- Botão direito no cabeçalho (ou o botão "Colunas"): escolher quais colunas aparecem, ajustar todas ao conteúdo, restaurar o padrão e alargar o painel até caberem todas (de novo, volta). O Nome ocupa o espaço que sobra até ser redimensionado. Larguras, colunas e ordem ficam salvas.
+- Clicar no título ordena (de novo inverte); pastas ficam sempre em cima. Dono e grupo vêm pelo nome (lidos de `/etc/passwd` e `/etc/group`), com o número quando não há nome.
 
 ### Biblioteca de comandos (painel direito, Ctrl+Shift+L)
 
-- Mais de 120 comandos em 17 temas: primeiros passos, disco, memória/CPU, processos, serviços, logs, rede, usuários, pacotes, arquivos, tmux, Docker, Git, sistema, segurança, Nginx/Apache/PHP e Laravel. Cada um com explicação em português e dica.
+- 242 comandos em 25 temas: primeiros passos, disco, memória/CPU, processos, serviços, logs, rede, usuários, pacotes, arquivos, tmux, Docker, Git, sistema, segurança, Nginx/Apache/PHP, Laravel, SAP (HANA, sapcontrol, SAP Business One) e Windows. Cada um com explicação em português e dica.
+- **Sistema** (no topo do painel): Automático, Ubuntu/Debian, RHEL/CentOS/Rocky/Alma, SUSE/SLES (SAP) ou Windows. No automático segue o terminal em foco: servidor SSH pelo `/etc/os-release` (ID e ID_LIKE, lido pelo monitor), PowerShell/CMD e Área de Trabalho Remota como Windows, WSL como Ubuntu. Os comandos mudam por sistema (`apt`/`dnf`/`zypper`, `ufw`/`firewalld`, `auth.log`/`secure`, `needs-restarting`, SELinux/AppArmor, `saptune`...); escolher um sistema fixa a lista e a escolha fica salva.
+- **Windows:** atalhos Win+R (`ncpa.cpl`, `services.msc`, `eventvwr.msc`, `diskmgmt.msc`, `appwiz.cpl`, `%temp%`, `shell:startup`...) abrem neste computador; com uma Área de Trabalho Remota em foco, o atalho é copiado para colar lá. Comandos de rede, sistema, serviços, disco, logs e usuários vão para o PowerShell/CMD ativo (ou SSH num servidor Windows); os de PowerShell funcionam também no CMD (`powershell -NoProfile -Command ...`).
+- Avisa quando a lista não combina com o terminal (comando de Linux num PowerShell, ou de Windows num servidor Linux) em vez de digitar.
 - Clique executa no terminal ativo; comandos com campos abrem um formulário com prévia do comando final. Os valores são escapados para o shell e não podem começar com "-".
 - Atalhos do tmux (Ctrl+B D, Ctrl+B %, ...) são enviados como teclas.
-- Segurança: comandos que alteram algo pedem confirmação (mais forte em produção); nada destrutivo entra na biblioteca (garantido por teste, `CommandSafety`); se houver um programa de tela cheia aberto (vim, top, less), o painel avisa antes de digitar nele; terminal do Windows (PowerShell/CMD) é bloqueado.
-- Busca sem acentos, Favoritos, Usados recentemente, "Meus comandos" (com campos `{{nome}}`), copiar e colocar sem executar.
+- Segurança: comandos que alteram algo pedem confirmação (mais forte em produção); nada destrutivo entra na biblioteca (garantido por teste, `CommandSafety`); se houver um programa de tela cheia aberto (vim, top, less), o painel avisa antes de digitar nele; valores dos comandos de Windows usam aspas do PowerShell ou do CMD (e recusam `%` e `"` no CMD).
+- Busca sem acentos, Favoritos, Usados recentemente, "Meus comandos" (com campos `{{nome}}`), "Minhas macros", copiar e colocar sem executar.
 - O conteúdo fica em `src/RootDock.Core/Commands/commands.pt-BR.json`.
+
+### Macros (Ferramentas → Macros)
+
+- Sequência de passos executada no terminal ativo: **Comando**, **Esperar texto** (ex.: `password`, `[Y/n]`, com tempo máximo) e **Pausa**.
+- Com "Esperar cada comando terminar" (padrão), o próximo comando só sai quando o prompt do shell volta: a saída é lida sem cores/controles e a linha atual precisa ter cara de prompt (`# $ > %`) ou ser igual ao prompt de antes. Comando seguido de "Esperar texto" não espera o prompt (é o caso das perguntas).
+- **Gravar:** grava os comandos executados no prompt do terminal ativo (os mesmos do histórico) até clicar em "Gravando macro" no topo; ao parar, a janela abre com a macro pronta para nomear e editar.
+- Andamento no topo da janela ("Macro … · 2/5"); clicar permite parar ou pular uma espera (útil quando o programa ficou esperando uma resposta). Para sozinha se o terminal cair ou se um texto esperado não aparecer.
+- Confirmação antes de rodar se algum comando altera algo (`rm`, `kill`, `reboot`...) ou se o servidor é de produção, com a lista dos comandos.
+- Também aparecem no painel de comandos, em "Minhas macros", para rodar com um clique. Ficam nas configurações (`settings.json`): não coloque senhas nelas.
+- Lógica em `src/RootDock.Core/Macros` (testada com um shell simulado); janela em `Dialogs/MacrosWindow`.
 
 ### Barra de status do servidor
 
@@ -226,7 +242,7 @@ O ícone do programa vem de `icone.png` (raiz). Ao trocá-lo, gere de novo `src/
 - **Aparência** (Exibir → Aparência do terminal): 5 temas de cores, fonte (só as de largura fixa instaladas), tamanho, espaço entre linhas, cursor (barra, bloco, sublinhado, piscar), histórico de rolagem, destaque ligado/desligado, copiar ao selecionar e botão direito colar ou abrir menu (copiar, colar, buscar, limpar, salvar). Prévia ao vivo.
 - **Reabrir as abas da última vez** com um clique na tela inicial.
 - **Print do código** (estilo CodeSnap): botão da câmera na barra das abas, Ctrl+Shift+S, botão direito no terminal ou no editor, ou Editar → Print do código. Usa a seleção (sem seleção, o que está na tela) com as cores do terminal ou o destaque de sintaxe do editor. Prévia com moldura macOS/Windows/nenhuma, título, 10 fundos (gradientes, sólido, transparente), espaço ao redor, fonte, números de linha (reais no editor), quebrar linhas longas, remover recuo comum, **ocultar IPs e e-mails**, sombra, cantos arredondados, assinatura e qualidade 1x/2x/3x; clique numa linha da prévia para destacá-la. **Copiar imagem** (PNG com transparência + bitmap para programas antigos), **Salvar PNG** e **Exportar PDF** (página do tamanho da imagem, sem perdas). As opções ficam lembradas.
-- **Macros:** em "Meus comandos", um comando com várias linhas executa cada linha em sequência.
+- **Macros:** em "Meus comandos", um comando com várias linhas é digitado de uma vez; para esperar cada comando, gravar ou responder perguntas, use Ferramentas → Macros.
 
 ### Gerenciador de arquivos (duas colunas)
 

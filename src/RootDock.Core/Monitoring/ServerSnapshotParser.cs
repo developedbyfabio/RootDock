@@ -12,6 +12,7 @@ public sealed class ServerSnapshotParser
 
     private string? _hostname;
     private string? _os;
+    private string? _osId;
     private string? _kernel;
     private int _cores;
     private string? _ips;
@@ -48,6 +49,7 @@ public sealed class ServerSnapshotParser
             {
                 case "@host": _hostname = Empty(value) ?? _hostname; break;
                 case "@os": _os = Empty(value) ?? _os; break;
+                case "@osid": _osId = Empty(value) ?? _osId; break;
                 case "@kernel": _kernel = Empty(value) ?? _kernel; break;
                 case "@cores": _cores = ParseInt(value) is > 0 and var c ? c : _cores; break;
                 case "@ips": _ips = Empty(value) ?? _ips; break;
@@ -142,6 +144,7 @@ public sealed class ServerSnapshotParser
         {
             Hostname = _hostname,
             OsName = _os,
+            OsId = _osId,
             Kernel = _kernel,
             Cores = _cores,
             IpAddresses = _ips,

@@ -1,0 +1,217 @@
+<ui:FluentWindow x:Class="RootDock.App.Dialogs.MacrosWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:vm="clr-namespace:RootDock.App.ViewModels"
+                 xmlns:views="clr-namespace:RootDock.App.Views"
+                 Title="Macros"
+                 Width="1020" Height="660" MinWidth="820" MinHeight="480"
+                 WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="None"
+                 ShowInTaskbar="False"
+                 Background="{DynamicResource RdSurface}">
+    <ui:FluentWindow.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolVis" />
+        <views:InverseBoolVisibilityConverter x:Key="InverseBoolVis" />
+
+        <Style x:Key="IconButton" TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
+            <Setter Property="Appearance" Value="Transparent" />
+            <Setter Property="Padding" Value="6" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Margin" Value="1,0,0,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="Mono" TargetType="ui:TextBox" BasedOn="{StaticResource {x:Type ui:TextBox}}">
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Padding" Value="8,5" />
+        </Style>
+
+        <!-- Um passo: número, tipo e o que ele faz -->
+        <DataTemplate x:Key="StepRow" DataType="{x:Type vm:MacroStepViewModel}">
+            <Border x:Name="Row" Padding="8,6" CornerRadius="6" Background="Transparent">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="28" />
+                        <ColumnDefinition Width="132" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="22" Height="22" CornerRadius="11" Background="{DynamicResource RdChip}" VerticalAlignment="Center" HorizontalAlignment="Left">
+                        <TextBlock Text="{Binding Number}" FontSize="11" Foreground="{DynamicResource RdTextDim}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <ui:SymbolIcon Symbol="{Binding Icon}" FontSize="15" Foreground="{DynamicResource RdAccent}" Margin="0,0,7,0" />
+                        <TextBlock Text="{Binding KindLabel}" FontSize="12.5" Foreground="{DynamicResource RdTextDim}" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <!-- Comando -->
+                    <ui:TextBox Grid.Column="2" Style="{StaticResource Mono}" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
+                                PlaceholderText="{Binding Placeholder}" Visibility="{Binding IsCommand, Converter={StaticResource BoolVis}}" />
+
+                    <!-- Esperar texto (com tempo máximo) -->
+                    <Grid Grid.Column="2" Visibility="{Binding IsWaitFor, Converter={StaticResource BoolVis}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="64" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ui:TextBox Style="{StaticResource Mono}" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="{Binding Placeholder}" />
+                        <TextBlock Grid.Column="1" Text="por até" Foreground="{DynamicResource RdTextDim}" VerticalAlignment="Center" Margin="10,0,8,0" />
+                        <ui:TextBox Grid.Column="2" Text="{Binding SecondsText, UpdateSourceTrigger=LostFocus}" HorizontalContentAlignment="Right" Padding="6,5"
+                                    ToolTip="Se o texto não aparecer nesse tempo, a macro para" />
+                        <TextBlock Grid.Column="3" Text="s" Foreground="{DynamicResource RdTextDim}" VerticalAlignment="Center" Margin="6,0,0,0" />
+                    </Grid>
+
+                    <!-- Pausa -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Visibility="{Binding IsWait, Converter={StaticResource BoolVis}}">
+                        <ui:TextBox Width="72" Text="{Binding SecondsText, UpdateSourceTrigger=LostFocus}" HorizontalContentAlignment="Right" Padding="6,5" />
+                        <TextBlock Text="segundos" Foreground="{DynamicResource RdTextDim}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                    </StackPanel>
+
+                    <StackPanel x:Name="Actions" Grid.Column="3" Orientation="Horizontal" Margin="8,0,0,0" Opacity="0.55">
+                        <ui:Button Style="{StaticResource IconButton}" Icon="{ui:SymbolIcon ArrowUp16}" Click="OnStepUp" ToolTip="Subir" />
+                        <ui:Button Style="{StaticResource IconButton}" Icon="{ui:SymbolIcon ArrowDown16}" Click="OnStepDown" ToolTip="Descer" />
+                        <ui:Button Style="{StaticResource IconButton}" Click="OnStepRemove" ToolTip="Remover o passo">
+                            <ui:Button.Icon>
+                                <ui:SymbolIcon Symbol="Dismiss16" Foreground="{DynamicResource RdProd}" />
+                            </ui:Button.Icon>
+                        </ui:Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Row" Property="Background" Value="{DynamicResource RdHover}" />
+                    <Setter TargetName="Actions" Property="Opacity" Value="1" />
+                </Trigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </ui:FluentWindow.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <ui:TitleBar Title="Macros" ShowMinimize="False" />
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="290" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Lista de macros -->
+            <DockPanel Margin="14,4,0,14">
+                <UniformGrid DockPanel.Dock="Top" Columns="2" Margin="0,0,0,10">
+                    <ui:Button Content="Nova macro" Icon="{ui:SymbolIcon Add20}" HorizontalAlignment="Stretch" Margin="0,0,4,0" Click="OnNew" />
+                    <ui:Button x:Name="RecordButton" Content="Gravar" HorizontalAlignment="Stretch" Margin="4,0,0,0" Click="OnRecord"
+                               ToolTip="Grava os comandos que você executar no terminal ativo até clicar em parar">
+                        <ui:Button.Icon>
+                            <ui:SymbolIcon Symbol="Record20" Filled="True" Foreground="{DynamicResource RdProd}" />
+                        </ui:Button.Icon>
+                    </ui:Button>
+                </UniformGrid>
+                <Border Background="{DynamicResource RdPanel}" BorderBrush="{DynamicResource RdBorder}" BorderThickness="1" CornerRadius="8">
+                    <Grid>
+                        <ListBox x:Name="List" BorderThickness="0" Background="Transparent" Padding="4" SelectionChanged="OnSelect"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemContainerStyle>
+                                <!-- Mesmo visual das outras listas: fundo suave e barra de destaque na selecionada -->
+                                <Style TargetType="ListBoxItem" BasedOn="{StaticResource RdListItem}">
+                                    <Setter Property="Padding" Value="12,8" />
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:MacroEditorViewModel}">
+                                    <DockPanel>
+                                        <ui:SymbolIcon Symbol="Flash20" FontSize="16" Foreground="{DynamicResource RdAccent}" Margin="0,0,10,0" VerticalAlignment="Center" />
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" Foreground="{DynamicResource RdText}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Summary}" FontSize="11.5" Foreground="{DynamicResource RdTextDim}" Margin="0,1,0,0" />
+                                        </StackPanel>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <TextBlock x:Name="ListEmpty" Margin="18" TextWrapping="Wrap" TextAlignment="Center" VerticalAlignment="Center" FontSize="12.5"
+                                   Foreground="{DynamicResource RdTextDim}" LineHeight="19"
+                                   Text="Nenhuma macro ainda.&#10;&#10;Crie uma em Nova macro ou clique em Gravar e execute os comandos no terminal: eles viram os passos." />
+                    </Grid>
+                </Border>
+            </DockPanel>
+
+            <!-- Editor -->
+            <Grid Grid.Column="1" Margin="16,4,16,14">
+                <TextBlock x:Name="EditorEmpty" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" FontSize="13"
+                           Foreground="{DynamicResource RdTextDim}" Text="Selecione uma macro à esquerda ou crie uma nova." />
+                <DockPanel x:Name="Editor" Visibility="Collapsed">
+                    <!-- Nome e descrição -->
+                    <StackPanel DockPanel.Dock="Top">
+                        <ui:TextBox x:Name="NameBox" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="Nome da macro (ex.: Atualizar e reiniciar o nginx)"
+                                    FontSize="15" FontWeight="SemiBold" />
+                        <ui:TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="O que ela faz (opcional)" Margin="0,8,0,0" />
+                    </StackPanel>
+
+                    <!-- Rodapé: opções, dicas e ações -->
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                        <CheckBox IsChecked="{Binding WaitForPrompt}" Content="Esperar cada comando terminar antes de mandar o próximo (recomendado)" />
+                        <DockPanel Margin="0,10,0,0">
+                            <ui:SymbolIcon Symbol="Lightbulb20" FontSize="14" Foreground="{DynamicResource RdStaging}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                            <TextBlock FontSize="11.5" Foreground="{DynamicResource RdTextDim}" TextWrapping="Wrap" LineHeight="17">
+                                Para responder uma pergunta (senha, [Y/n]): depois do comando, adicione <Run FontWeight="SemiBold">Esperar texto</Run> com parte da pergunta e, em seguida, um <Run FontWeight="SemiBold">Comando</Run> com a resposta.
+                                As macros ficam salvas em texto nas configurações do RootDock: não coloque senhas nelas.
+                            </TextBlock>
+                        </DockPanel>
+                        <Border Height="1" Background="{DynamicResource RdBorder}" Margin="0,12,0,12" />
+                        <DockPanel LastChildFill="False">
+                            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Ellipse x:Name="TargetDot" Width="7" Height="7" Margin="0,0,8,0" Fill="{DynamicResource RdTextDim}" />
+                                <TextBlock x:Name="TargetText" FontSize="12" Foreground="{DynamicResource RdTextDim}" TextTrimming="CharacterEllipsis" MaxWidth="300" />
+                            </StackPanel>
+                            <ui:Button DockPanel.Dock="Right" x:Name="RunButton" Content="Executar no terminal" Appearance="Primary" Margin="8,0,0,0" Click="OnRun">
+                                <ui:Button.Icon>
+                                    <ui:SymbolIcon Symbol="Play20" Filled="True" />
+                                </ui:Button.Icon>
+                            </ui:Button>
+                            <ui:Button DockPanel.Dock="Right" Content="Duplicar" Icon="{ui:SymbolIcon Copy20}" Margin="8,0,0,0" Click="OnDuplicate" />
+                            <ui:Button DockPanel.Dock="Right" Content="Excluir" Click="OnDelete">
+                                <ui:Button.Icon>
+                                    <ui:SymbolIcon Symbol="Delete20" Foreground="{DynamicResource RdProd}" />
+                                </ui:Button.Icon>
+                            </ui:Button>
+                        </DockPanel>
+                    </StackPanel>
+
+                    <!-- Passos -->
+                    <DockPanel Margin="0,14,0,0">
+                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8" LastChildFill="False">
+                            <TextBlock DockPanel.Dock="Left" Text="Passos" FontWeight="SemiBold" FontSize="13.5" VerticalAlignment="Center" />
+                            <ui:Button DockPanel.Dock="Right" Content="Pausa" Icon="{ui:SymbolIcon Timer20}" Margin="6,0,0,0" Click="OnAddWait"
+                                       ToolTip="Espera alguns segundos antes do próximo passo" />
+                            <ui:Button DockPanel.Dock="Right" Content="Esperar texto" Icon="{ui:SymbolIcon Hourglass20}" Margin="6,0,0,0" Click="OnAddWaitFor"
+                                       ToolTip="Espera um texto aparecer no terminal (ex.: password, [Y/n]) antes do próximo passo" />
+                            <ui:Button DockPanel.Dock="Right" Content="Comando" Icon="{ui:SymbolIcon Add20}" Click="OnAddCommand" />
+                        </DockPanel>
+                        <Border Background="{DynamicResource RdPanel}" BorderBrush="{DynamicResource RdBorder}" BorderThickness="1" CornerRadius="8">
+                            <Grid>
+                                <ScrollViewer x:Name="StepsScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="4">
+                                    <ItemsControl x:Name="StepsList" ItemsSource="{Binding Steps}" ItemTemplate="{StaticResource StepRow}" />
+                                </ScrollViewer>
+                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" FontSize="12.5" LineHeight="19"
+                                           Foreground="{DynamicResource RdTextDim}" Margin="24"
+                                           Text="Nenhum passo ainda. Adicione um comando acima (ou grave o que você digita no terminal)."
+                                           Visibility="{Binding HasSteps, Converter={StaticResource InverseBoolVis}}" />
+                            </Grid>
+                        </Border>
+                    </DockPanel>
+                </DockPanel>
+            </Grid>
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

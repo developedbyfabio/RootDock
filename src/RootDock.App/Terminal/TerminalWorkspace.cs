@@ -68,6 +68,9 @@ public sealed class TerminalWorkspace
     /// <summary>Comandos digitados (para a busca no histórico).</summary>
     public Core.History.CommandHistory? History { get; set; }
 
+    /// <summary>Um comando digitado no prompt foi executado (o mesmo que vai para o histórico): gravação de macro.</summary>
+    public event Action<TerminalSession, string>? CommandRan;
+
     public event Action<int>? FontSizeChanged;
 
     /// <summary>Botão/atalho da biblioteca de comandos (canto superior direito do terminal).</summary>
@@ -671,6 +674,7 @@ public sealed class TerminalWorkspace
                 {
                     var where = string.IsNullOrEmpty(session.Entry.Host) ? session.Entry.Endpoint : session.Entry.Host;
                     _ = Task.Run(() => History?.Add(session.Entry.Id, session.Entry.Name, where, ran));
+                    CommandRan?.Invoke(session, ran.Trim());
                 }
 
                 break;

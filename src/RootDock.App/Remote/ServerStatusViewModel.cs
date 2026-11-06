@@ -51,10 +51,17 @@ public sealed partial class ServerStatusViewModel : ObservableObject
     [ObservableProperty] private IReadOnlyList<ProcessRow> _processes = [];
     [ObservableProperty] private string _updatedText = "";
 
+    /// <summary>Nome do sistema ("Ubuntu 24.04.2 LTS") e família dos comandos (Core.Commands.OsFamily), quando conhecidos.</summary>
+    [ObservableProperty] private string? _osName;
+
+    [ObservableProperty] private string? _osFamily;
+
     public void Update(ServerSnapshot s)
     {
         HasData = true;
         Hostname = s.Hostname ?? "servidor";
+        OsName = s.OsName;
+        OsFamily = Core.Commands.OsFamily.FromOsRelease(s.OsId);
         SystemText = string.Join("  ·  ", new[] { s.OsName, s.Kernel, s.Cores > 0 ? $"{s.Cores} núcleos" : null }.Where(x => !string.IsNullOrEmpty(x)));
         IpText = s.IpAddresses ?? "";
         UserText = s.User is null ? "" : s.UserSessions > 1 ? $"{s.User} (x{s.UserSessions})" : s.User;

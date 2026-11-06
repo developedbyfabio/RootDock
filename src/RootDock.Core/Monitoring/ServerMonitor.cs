@@ -22,7 +22,7 @@ public sealed class ServerMonitor : IDisposable
           echo "@@BEGIN"
           if [ "$first" = 1 ]; then
             echo "@host $(hostname 2>/dev/null)"
-            if [ -r /etc/os-release ]; then . /etc/os-release; echo "@os $PRETTY_NAME"; fi
+            if [ -r /etc/os-release ]; then . /etc/os-release; echo "@os $PRETTY_NAME"; echo "@osid $ID $ID_LIKE"; fi
             echo "@kernel $(uname -sr 2>/dev/null)"
             echo "@cores $(nproc 2>/dev/null || grep -c ^processor /proc/cpuinfo 2>/dev/null)"
             echo "@ips $(hostname -I 2>/dev/null)"

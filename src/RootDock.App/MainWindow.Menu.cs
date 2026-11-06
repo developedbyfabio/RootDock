@@ -169,6 +169,16 @@ public partial class MainWindow
         yield return Command("Chave SSH deste computador...", () => SshKeyWindow.ShowFor(this));
         yield return Command("Executar em vários servidores...", () => OpenMultiExec(PickedEntries()));
         yield return new Separator();
+        yield return Command("Macros...", () => OpenMacros());
+        yield return _recording is null
+            ? Command("Gravar macro no terminal ativo", () => StartMacroRecording(), enabled: _macroRunner is null && _workspace.ActiveSession is { State: Terminal.TerminalState.Connected })
+            : Command("Parar a gravação e salvar a macro", () => StopMacroRecording(save: true));
+        if (_macroRunner is not null)
+        {
+            yield return Command("Parar a macro em execução", StopMacro);
+        }
+
+        yield return new Separator();
         yield return Command("Ferramentas de rede (ping, DNS, portas, SSL...)", () => OpenNetworkTools());
         yield return Command("Histórico de comandos...", OpenHistory, "Ctrl+Shift+H");
         yield return Command("Gravações de terminal...", () => RecordingsWindow.ShowFor(this, _workspace.RecordingsDirectory!, _workspace));

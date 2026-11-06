@@ -70,14 +70,25 @@
             </ui:TitleBar.Header>
             <!-- Aparece quando uma versão nova terminou de baixar (como o "Restart to Update" do VS Code) -->
             <ui:TitleBar.TrailingContent>
-                <ui:Button x:Name="UpdatePill" Visibility="Collapsed" Appearance="Primary" Click="OnUpdatePill"
-                           AutomationProperties.Name="Reiniciar para atualizar"
-                           Padding="10,3" Margin="0,0,10,0" FontSize="12" VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal">
-                        <ui:SymbolIcon Symbol="ArrowCircleUp20" FontSize="15" Margin="0,0,6,0" />
-                        <TextBlock Text="Reiniciar para atualizar" VerticalAlignment="Center" />
-                    </StackPanel>
-                </ui:Button>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Macro rodando ou sendo gravada: andamento e, ao clicar, parar / pular a espera -->
+                    <ui:Button x:Name="MacroPill" Visibility="Collapsed" Click="OnMacroPill"
+                               AutomationProperties.Name="Macro"
+                               Padding="10,3" Margin="0,0,8,0" FontSize="12" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon x:Name="MacroPillIcon" Symbol="Flash20" FontSize="15" Margin="0,0,6,0" />
+                            <TextBlock x:Name="MacroPillText" VerticalAlignment="Center" MaxWidth="320" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </ui:Button>
+                    <ui:Button x:Name="UpdatePill" Visibility="Collapsed" Appearance="Primary" Click="OnUpdatePill"
+                               AutomationProperties.Name="Reiniciar para atualizar"
+                               Padding="10,3" Margin="0,0,10,0" FontSize="12" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="ArrowCircleUp20" FontSize="15" Margin="0,0,6,0" />
+                            <TextBlock Text="Reiniciar para atualizar" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </ui:Button>
+                </StackPanel>
             </ui:TitleBar.TrailingContent>
         </ui:TitleBar>
 
@@ -108,7 +119,7 @@
 
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition x:Name="SidebarColumn" Width="280" MinWidth="180" MaxWidth="600" />
+                <ColumnDefinition x:Name="SidebarColumn" Width="280" MinWidth="180" MaxWidth="1400" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" MinWidth="320" />
                 <ColumnDefinition Width="Auto" />

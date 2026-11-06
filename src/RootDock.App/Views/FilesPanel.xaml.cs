@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Win32;
@@ -15,11 +16,304 @@ public partial class FilesPanel : UserControl
 {
     private static string _lastDownloadFolder = DownloadsFolder();
 
+    /// <summary>Espaço das linhas fora das colunas (margem interna do item, dos dois lados) mais 1 px de folga.</summary>
+    private const double RowChrome = 13;
+
+    /// <summary>Largura mínima do Nome ao alargar o painel para ver todas as colunas.</summary>
+    private const double WideNameWidth = 260;
+
+    private ScrollViewer? _scroller;
+
     public FilesPanel()
     {
         InitializeComponent();
         DataContextChanged += (_, _) => UpdatePlaceholder();
         UpdatePlaceholder();
+        List.Loaded += (_, _) => HookScroller();
+    }
+
+    /// <summary>Larguras e colunas visíveis (a janela liga às preferências salvas).</summary>
+    public FileColumnsLayout Columns => (FileColumnsLayout)Resources["Columns"];
+
+    /// <summary>Menu de colunas → alargar/voltar a barra lateral (recebe a largura que mostra todas as colunas).</summary>
+    public event Action<double>? WidenRequested;
+
+    /// <summary>A barra lateral está alargada pelo menu de colunas (o item passa a ser "voltar").</summary>
+    public Func<bool>? IsWidened { get; set; }
+
+    private void OnSortHeader(object sender, RoutedEventArgs e)
+    {
+        if (Vm is { } vm && sender is FrameworkElement { Tag: string tag } && Enum.TryParse<FileSortColumn>(tag, out var column))
+        {
+            vm.SortBy(column);
+            Columns.Settings.SortColumn = vm.SortColumn.ToString();
+            Columns.Settings.SortDescending = vm.SortDescending;
+            Columns.Save();
+        }
+    }
+
+    // ------------------------------------------------------------------ cabeçalho e colunas
+
+    private void HookScroller()
+    {
+        if (_scroller is not null || FindChild<ScrollViewer>(List) is not { } scroller)
+        {
+            return;
+        }
+
+        _scroller = scroller;
+        scroller.ScrollChanged += (_, e) =>
+        {
+            if (e.HorizontalChange != 0 || e.ViewportWidthChange != 0 || e.ExtentWidthChange != 0)
+            {
+                SyncHeader();
+            }
+        };
+        scroller.SizeChanged += (_, _) => SyncHeader();
+        SyncHeader();
+    }
+
+    /// <summary>
+    /// Cabeçalho alinhado com as linhas: mesma origem, mesma área útil (a barra de rolagem vertical
+    /// aparece e some) e a mesma rolagem horizontal. O Nome automático ocupa o espaço que sobra.
+    /// </summary>
+    private void SyncHeader()
+    {
+        if (_scroller is not { } scroller)
+        {
+            return;
+        }
+
+        if (FindChild<ItemsPresenter>(List) is { } items && FindChild<ScrollContentPresenter>(scroller) is { ActualWidth: > 0 } viewport)
+        {
+            var left = items.TranslatePoint(default, ListArea).X;
+            var right = ListArea.ActualWidth - viewport.TranslatePoint(new Point(viewport.ActualWidth, 0), ListArea).X;
+            var margin = new Thickness(Math.Max(0, Math.Round(left)), 2, Math.Max(0, Math.Round(right)), 2);
+            if (margin != HeaderHost.Margin)
+            {
+                HeaderHost.Margin = margin;
+            }
+        }
+
+        if (scroller.ViewportWidth > 0)
+        {
+            Columns.SetAvailable(scroller.ViewportWidth - RowChrome);
+        }
+
+        HeaderScroller.ScrollToHorizontalOffset(scroller.HorizontalOffset);
+    }
+
+    /// <summary>Shift + roda do mouse rola para os lados (as colunas podem passar da largura do painel).</summary>
+    private void OnListWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (Keyboard.Modifiers == ModifierKeys.Shift && _scroller is { ScrollableWidth: > 0 } scroller)
+        {
+            scroller.ScrollToHorizontalOffset(scroller.HorizontalOffset - e.Delta / 2.5);
+            e.Handled = true;
+        }
+    }
+
+    private double _gripStartWidth;
+    private double _gripStartName;
+    private double _gripStartX;
+    private bool _gripMoved;
+
+    private static FileColumn? ColumnOf(object sender) =>
+        sender is FrameworkElement { Tag: string tag } && Enum.TryParse<FileColumn>(tag, out var column) ? column : null;
+
+    private void OnGripStarted(object sender, DragStartedEventArgs e)
+    {
+        if (ColumnOf(sender) is not { } column)
+        {
+            return;
+        }
+
+        _gripStartWidth = Columns.WidthOf(column);
+        _gripStartName = Columns.WidthOf(FileColumn.Name);
+        _gripStartX = Mouse.GetPosition(HeaderHost).X;
+        _gripMoved = false;
+    }
+
+    /// <summary>
+    /// Largura = largura inicial + quanto o mouse andou (posição absoluta, não a soma dos passos:
+    /// não acumula erro quando a coluna bate no mínimo). A divisória acompanha o mouse.
+    /// </summary>
+    private void OnGripDelta(object sender, DragDeltaEventArgs e)
+    {
+        if (ColumnOf(sender) is not { } column)
+        {
+            return;
+        }
+
+        var delta = Mouse.GetPosition(HeaderHost).X - _gripStartX;
+        if (!_gripMoved && Math.Abs(delta) < 1)
+        {
+            return;
+        }
+
+        if (!_gripMoved && column != FileColumn.Name && Columns.IsNameAuto)
+        {
+            // Nome automático encolheria para compensar e a divisória não sairia do lugar:
+            // ao mexer numa coluna, o Nome fica com a largura que tinha.
+            Columns.SetWidth(FileColumn.Name, _gripStartName);
+        }
+
+        _gripMoved = true;
+        Columns.SetWidth(column, _gripStartWidth + delta);
+    }
+
+    private void OnGripCompleted(object sender, DragCompletedEventArgs e)
+    {
+        if (_gripMoved)
+        {
+            Columns.Save();
+        }
+
+        _gripMoved = false;
+    }
+
+    /// <summary>Dois cliques na divisória: a coluna fica do tamanho do maior texto (como no Explorer).</summary>
+    private void OnGripDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (ColumnOf(sender) is not { } column)
+        {
+            return;
+        }
+
+        Columns.SetWidth(column, FitWidth(column));
+        Columns.Save();
+        e.Handled = true;
+    }
+
+    private void OnHeaderRightClick(object sender, MouseButtonEventArgs e)
+    {
+        ShowColumnsMenu(HeaderHost, PlacementMode.MousePoint);
+        e.Handled = true;
+    }
+
+    private void OnColumnsButton(object sender, RoutedEventArgs e) => ShowColumnsMenu(DetailsButton, PlacementMode.Bottom);
+
+    private void ShowColumnsMenu(UIElement target, PlacementMode placement)
+    {
+        var menu = new ContextMenu { PlacementTarget = target, Placement = placement };
+        menu.Items.Add(new MenuItem { Header = "Colunas visíveis", IsEnabled = false });
+        foreach (var column in FileColumnSettings.Optional)
+        {
+            var item = new MenuItem { Header = ColumnLabel(column), IsCheckable = true, IsChecked = Columns.IsVisible(column), StaysOpenOnClick = true };
+            // Checked/Unchecked (e não Click): também vale para teclado e leitor de tela.
+            item.Checked += (_, _) => Columns.SetVisible(column, true);
+            item.Unchecked += (_, _) => Columns.SetVisible(column, false);
+            menu.Items.Add(item);
+        }
+
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Menu("Ajustar larguras ao conteúdo", FitAll));
+        menu.Items.Add(Menu("Restaurar colunas e larguras", Columns.Reset));
+        if (WidenRequested is not null)
+        {
+            menu.Items.Add(new Separator());
+            var widened = IsWidened?.Invoke() == true;
+            menu.Items.Add(Menu(widened ? "Voltar o painel à largura anterior" : "Alargar o painel para ver todas as colunas",
+                () => WidenRequested?.Invoke(WidthForAllColumns())));
+        }
+
+        menu.IsOpen = true;
+    }
+
+    /// <summary>Colunas do tamanho do conteúdo; o Nome volta a ocupar o espaço que sobra.</summary>
+    private void FitAll()
+    {
+        foreach (var column in FileColumnSettings.Optional.Where(Columns.IsVisible))
+        {
+            Columns.SetWidth(column, FitWidth(column));
+        }
+
+        Columns.AutoSizeName();
+        Columns.Save();
+    }
+
+    /// <summary>Largura do painel que mostra todas as colunas visíveis sem rolar para o lado.</summary>
+    private double WidthForAllColumns()
+    {
+        var name = Columns.IsNameAuto ? WideNameWidth : Math.Max(Columns.WidthOf(FileColumn.Name), FileColumnSettings.MinNameWidth);
+        var chrome = _scroller is { ViewportWidth: > 0 } s ? ActualWidth - s.ViewportWidth : 30;
+        return Math.Ceiling(name + Columns.Settings.OthersWidth + RowChrome + chrome + 2);
+    }
+
+    private static string ColumnLabel(FileColumn column) => column switch
+    {
+        FileColumn.Name => "Nome",
+        FileColumn.Size => "Tamanho",
+        FileColumn.Modified => "Modificado",
+        FileColumn.Owner => "Dono",
+        FileColumn.Group => "Grupo",
+        _ => "Permissões",
+    };
+
+    /// <summary>Largura que mostra o maior texto da coluna (e o título) sem cortar.</summary>
+    private double FitWidth(FileColumn column)
+    {
+        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        var normal = new Typeface(List.FontFamily, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+        var typeface = column == FileColumn.Permissions
+            ? new Typeface(new FontFamily("Cascadia Mono, Consolas"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal)
+            : normal;
+        var size = column switch
+        {
+            FileColumn.Name => 13,
+            FileColumn.Permissions => 11,
+            _ => 11.5,
+        };
+
+        // Linhas repetem muito (datas, donos): mede cada texto uma vez; pastas enormes, só as primeiras.
+        var texts = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var entry in Vm?.Entries.Take(5000) ?? [])
+        {
+            texts.Add(column switch
+            {
+                FileColumn.Name => entry.Name,
+                FileColumn.Size => entry.SizeText,
+                FileColumn.Modified => entry.ModifiedText,
+                FileColumn.Owner => entry.Owner,
+                FileColumn.Group => entry.Group,
+                _ => entry.Permissions,
+            });
+        }
+
+        var content = texts.Count == 0 ? 0 : texts.Max(t => Measure(t, typeface, size, dpi));
+        var title = Measure(ColumnLabel(column), normal, 11.5, dpi) + 9; // + seta da ordem
+        var chrome = column switch
+        {
+            FileColumn.Name => 24 + 8, // ícone e espaço; margem direita
+            FileColumn.Size => 6 + 10,
+            _ => 8 + 6,
+        };
+        return Math.Ceiling(Math.Max(content + chrome, title + 14) + 2);
+    }
+
+    private static double Measure(string text, Typeface typeface, double size, double dpi) =>
+        string.IsNullOrEmpty(text) ? 0 :
+        new FormattedText(text, System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, typeface, size, Brushes.Black, dpi)
+            .WidthIncludingTrailingWhitespace;
+
+    private static T? FindChild<T>(DependencyObject parent)
+        where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T match)
+            {
+                return match;
+            }
+
+            if (FindChild<T>(child) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     public RemoteEditService? Editor { get; set; }

@@ -20,6 +20,9 @@ public static class CommandSafety
         @"migrate:(fresh|reset|rollback)", @"db:wipe",
         @"compose\s+down", @"docker\s+(rm|rmi)\b", @"system\s+prune", @"volume\s+(rm|prune)",
         @"chmod\s+-R\s+777", @">\s*/dev/sd", @"--vacuum", @":\(\)\s*\{",
+        // Windows (PowerShell e CMD)
+        @"\bRemove-Item\b", @"(^|[;&|]\s*)(del|erase)\s", @"\b(rd|rmdir)\s+/s", @"\bformat\s+[a-z]:", @"\bFormat-Volume\b", @"\bClear-Disk\b",
+        @"\b(Restart|Stop)-Computer\b", @"\bshutdown(\.exe)?\s+/[rsp]",
     ];
 
     private static readonly Regex[] Compiled =

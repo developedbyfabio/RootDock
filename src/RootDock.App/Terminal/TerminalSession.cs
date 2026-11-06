@@ -203,6 +203,11 @@ public sealed class TerminalSession : IDisposable, ITerminalPrompter
     /// <summary>Digita pelo terminal visual (o comando fica destacado no histórico).</summary>
     public void Type(string text) => _workspace.TypeInto(this, text);
 
+    /// <summary>Saída do servidor já decodificada, na thread de leitura (usada pelas macros).</summary>
+    public OutputObserver? OutputObserved { get; set; }
+
+    public delegate void OutputObserver(ReadOnlySpan<char> text);
+
     /// <summary>Dados binários do xterm (relatórios de mouse antigos): cada caractere é um byte.</summary>
     public void SendBinary(string data)
     {
@@ -393,6 +398,7 @@ public sealed class TerminalSession : IDisposable, ITerminalPrompter
         try
         {
             var count = _decoder.GetChars(bytes, chars, flush: false);
+            OutputObserved?.Invoke(chars.AsSpan(0, count)); // macro em andamento (na thread de leitura)
             lock (_gate)
             {
                 _pending.Append(chars, 0, count);

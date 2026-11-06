@@ -41,7 +41,7 @@
       "commands": [
         { "id": "memoria.free", "title": "Memória livre", "cmd": "free -h", "description": "Memória total, usada e disponível (inclui swap). Olhe a coluna \"available\".", "tags": ["ram", "memoria", "swap"] },
         { "id": "memoria.top", "title": "Monitor de processos (top)", "cmd": "top", "description": "Tela ao vivo com os processos que mais consomem.", "tip": "Shift+M ordena por memória, Shift+P por CPU, q sai.", "tags": ["monitor", "processos", "lento"] },
-        { "id": "memoria.htop", "title": "Monitor colorido (htop)", "cmd": "htop", "description": "Versão mais amigável do top, com barras coloridas e mouse.", "tip": "F10 ou q sai. Se não existir: sudo apt install htop.", "tags": ["monitor", "processos"] },
+        { "id": "memoria.htop", "title": "Monitor colorido (htop)", "cmd": "htop", "description": "Versão mais amigável do top, com barras coloridas e mouse.", "tip": "F10 ou q sai. Se não existir: sudo apt install htop.", "tags": ["monitor", "processos"], "variants": { "rhel": { "tip": "F10 ou q sai. Se não existir: sudo dnf install htop (no RHEL/Rocky/Alma vem do repositório EPEL)." }, "suse": { "tip": "F10 ou q sai. Se não existir: sudo zypper install htop." } } },
         { "id": "memoria.uptime", "title": "Carga e tempo ligado", "cmd": "uptime", "description": "Há quanto tempo está ligado e a carga média (1, 5 e 15 minutos). Carga maior que o número de núcleos indica sobrecarga.", "tags": ["carga", "load"] },
         { "id": "memoria.top-mem", "title": "Processos que mais usam memória", "cmd": "ps aux --sort=-%mem | head -n 15", "description": "Os 15 processos que mais ocupam RAM agora.", "tags": ["ram", "pesado"] },
         { "id": "memoria.top-cpu", "title": "Processos que mais usam CPU", "cmd": "ps aux --sort=-%cpu | head -n 15", "description": "Os 15 processos que mais usam o processador agora.", "tags": ["cpu", "lento", "pesado"] },
@@ -89,6 +89,8 @@
       "commands": [
         { "id": "logs.system", "title": "Últimas mensagens do sistema", "cmd": "journalctl -n 100 --no-pager", "description": "As 100 mensagens mais recentes de todo o sistema.", "tags": ["syslog", "sistema"] },
         { "id": "logs.errors", "title": "Erros desde que ligou", "cmd": "journalctl -p err -b --no-pager | tail -n 50", "description": "Somente mensagens de erro desde o último reinício.", "tags": ["erro", "falha"] },
+        { "id": "logs.messages", "title": "Log geral do sistema (messages)", "cmd": "sudo tail -n 100 /var/log/messages", "description": "As 100 últimas linhas do log geral (serviços, kernel, cron).", "tip": "No SLES 15 o log fica só no journal se o rsyslog não estiver instalado: use \"Últimas mensagens do sistema\".", "sudo": true, "os": ["rhel", "suse"], "tags": ["messages", "sistema"] },
+        { "id": "logs.syslog", "title": "Log geral do sistema (syslog)", "cmd": "sudo tail -n 100 /var/log/syslog", "description": "As 100 últimas linhas do log geral (serviços, kernel, cron).", "sudo": true, "os": ["debian"], "tags": ["syslog", "sistema"] },
         { "id": "logs.follow", "title": "Acompanhar um log ao vivo", "cmd": "tail -f {{arquivo}}", "description": "Mostra novas linhas do arquivo assim que são gravadas.", "tip": "Ctrl+C para parar.", "params": [{ "name": "arquivo", "label": "Arquivo", "default": "/var/log/syslog" }], "tags": ["acompanhar", "tempo real"] },
         { "id": "logs.tail", "title": "Últimas linhas de um arquivo", "cmd": "tail -n {{linhas}} {{arquivo}}", "description": "Mostra o final do arquivo, onde ficam os registros mais novos.", "params": [{ "name": "linhas", "label": "Linhas", "default": "100", "type": "number" }, { "name": "arquivo", "label": "Arquivo", "default": "/var/log/syslog" }], "tags": ["final"] },
         { "id": "logs.grep", "title": "Procurar texto em um log", "cmd": "grep -i {{texto}} {{arquivo}} | tail -n 50", "description": "As 50 últimas linhas que contêm o texto (sem diferenciar maiúsculas).", "params": [{ "name": "texto", "label": "Texto", "placeholder": "error" }, { "name": "arquivo", "label": "Arquivo", "default": "/var/log/syslog" }], "tags": ["buscar", "filtrar"] },
@@ -106,7 +108,7 @@
         { "id": "rede.public", "title": "IP público", "cmd": "curl -s https://ifconfig.me; echo", "description": "O endereço com que este servidor aparece na internet.", "tags": ["ip externo", "internet"] },
         { "id": "rede.ports", "title": "Portas abertas", "cmd": "sudo ss -tulpn", "description": "Portas em que algum programa está esperando conexões, e qual programa.", "sudo": true, "tags": ["portas", "escutando", "listen"] },
         { "id": "rede.ping", "title": "Testar se um servidor responde", "cmd": "ping -c 4 {{host}}", "description": "Envia 4 pacotes e mostra o tempo de resposta.", "params": [{ "name": "host", "label": "Servidor ou IP", "placeholder": "8.8.8.8" }], "tags": ["ping", "conectividade"] },
-        { "id": "rede.port", "title": "Testar porta de outro servidor", "cmd": "nc -zv -w 3 {{host}} {{porta}}", "description": "Diz se a porta está acessível a partir deste servidor.", "params": [{ "name": "host", "label": "Servidor ou IP", "placeholder": "10.0.0.5" }, { "name": "porta", "label": "Porta", "placeholder": "3306", "type": "number" }], "tags": ["telnet", "porta", "firewall"] },
+        { "id": "rede.port", "title": "Testar porta de outro servidor", "cmd": "nc -zv -w 3 {{host}} {{porta}}", "description": "Diz se a porta está acessível a partir deste servidor.", "params": [{ "name": "host", "label": "Servidor ou IP", "placeholder": "10.0.0.5" }, { "name": "porta", "label": "Porta", "placeholder": "3306", "type": "number" }], "tags": ["telnet", "porta", "firewall"], "variants": { "rhel": { "cmd": "timeout 3 bash -c '</dev/tcp/$0/$1' {{host}} {{porta}} && echo \"porta aberta\" || echo \"fechada ou bloqueada\"", "tip": "Usa o próprio bash (o nc do RHEL é o ncat, com outras opções)." }, "suse": { "cmd": "timeout 3 bash -c '</dev/tcp/$0/$1' {{host}} {{porta}} && echo \"porta aberta\" || echo \"fechada ou bloqueada\"" } } },
         { "id": "rede.dns", "title": "Descobrir o IP de um domínio", "cmd": "getent hosts {{dominio}}", "description": "Consulta o DNS como os programas do servidor fazem.", "params": [{ "name": "dominio", "label": "Domínio", "placeholder": "google.com" }], "tags": ["dns", "nslookup"] },
         { "id": "rede.http", "title": "Testar um site (cabeçalhos)", "cmd": "curl -sI {{url}}", "description": "Mostra o código HTTP (200, 301, 500...) e os cabeçalhos.", "params": [{ "name": "url", "label": "Endereço", "placeholder": "https://exemplo.com.br" }], "tags": ["site", "http", "status"] },
         { "id": "rede.routes", "title": "Rotas de rede", "cmd": "ip route", "description": "Por onde o tráfego sai (gateway padrão e redes conhecidas).", "tags": ["gateway", "rota"] },
@@ -136,13 +138,15 @@
       "icon": "Box20",
       "description": "Instalar, procurar e atualizar programas (Ubuntu/Debian, apt).",
       "commands": [
-        { "id": "pacotes.upgradable", "title": "Atualizações disponíveis", "cmd": "apt list --upgradable 2>/dev/null", "description": "Programas que têm versão nova esperando para instalar.", "tags": ["update", "atualizar"] },
-        { "id": "pacotes.update", "title": "Atualizar a lista de programas", "cmd": "sudo apt update", "description": "Baixa a lista de versões mais recente. Não instala nada.", "sudo": true, "tags": ["update"] },
-        { "id": "pacotes.upgrade", "title": "Instalar atualizações", "cmd": "sudo apt upgrade", "description": "Atualiza os programas instalados. Em produção, faça numa janela de manutenção.", "risk": "caution", "sudo": true, "tags": ["upgrade", "atualizar"] },
-        { "id": "pacotes.search", "title": "Procurar programa", "cmd": "apt search {{termo}}", "description": "Procura pacotes pelo nome ou descrição.", "params": [{ "name": "termo", "label": "Termo", "placeholder": "htop" }], "tags": ["buscar", "instalar"] },
-        { "id": "pacotes.show", "title": "Detalhes de um programa", "cmd": "apt show {{pacote}}", "description": "Versão, tamanho e descrição de um pacote.", "params": [{ "name": "pacote", "label": "Pacote", "placeholder": "nginx" }], "tags": ["info", "versao"] },
-        { "id": "pacotes.installed", "title": "Programa está instalado?", "cmd": "dpkg -l | grep -i {{pacote}}", "description": "Mostra se o pacote (ou parecidos) está instalado e a versão.", "params": [{ "name": "pacote", "label": "Pacote", "placeholder": "nginx" }], "tags": ["instalado", "versao"] },
-        { "id": "pacotes.install", "title": "Instalar um programa", "cmd": "sudo apt install {{pacote}}", "description": "Instala o pacote e o que ele precisa. Confirme com Y quando perguntar.", "risk": "caution", "sudo": true, "params": [{ "name": "pacote", "label": "Pacote", "placeholder": "htop" }], "tags": ["install", "instalar"] }
+        { "id": "pacotes.upgradable", "title": "Atualizações disponíveis", "cmd": "apt list --upgradable 2>/dev/null", "description": "Programas que têm versão nova esperando para instalar.", "tags": ["update", "atualizar"], "variants": { "rhel": { "cmd": "dnf check-update", "tip": "No CentOS 7 e RHEL 7, use yum no lugar de dnf." }, "suse": { "cmd": "zypper list-updates" } } },
+        { "id": "pacotes.patches", "title": "Correções (patches) disponíveis", "cmd": "zypper list-patches", "description": "Patches oficiais da SUSE ainda não aplicados, com a categoria (security, recommended...).", "os": ["suse"], "tags": ["seguranca", "patch", "sles"] },
+        { "id": "pacotes.security", "title": "Atualizações de segurança pendentes", "cmd": "dnf updateinfo list --security", "description": "Só as atualizações marcadas como de segurança, com o boletim (RHSA) de cada uma.", "os": ["rhel"], "tags": ["seguranca", "cve", "patch"] },
+        { "id": "pacotes.update", "title": "Atualizar a lista de programas", "cmd": "sudo apt update", "description": "Baixa a lista de versões mais recente. Não instala nada.", "sudo": true, "tags": ["update"], "variants": { "rhel": { "cmd": "sudo dnf makecache", "description": "Atualiza a lista de versões dos repositórios. Não instala nada." }, "suse": { "cmd": "sudo zypper refresh", "description": "Atualiza a lista de versões dos repositórios. Não instala nada." } } },
+        { "id": "pacotes.upgrade", "title": "Instalar atualizações", "cmd": "sudo apt upgrade", "description": "Atualiza os programas instalados. Em produção, faça numa janela de manutenção.", "risk": "caution", "sudo": true, "tags": ["upgrade", "atualizar"], "variants": { "rhel": { "cmd": "sudo dnf upgrade" }, "suse": { "cmd": "sudo zypper update", "tip": "Em produção no SLES, prefira \"zypper patch\": aplica só as correções oficiais." } } },
+        { "id": "pacotes.search", "title": "Procurar programa", "cmd": "apt search {{termo}}", "description": "Procura pacotes pelo nome ou descrição.", "params": [{ "name": "termo", "label": "Termo", "placeholder": "htop" }], "tags": ["buscar", "instalar"], "variants": { "rhel": { "cmd": "dnf search {{termo}}" }, "suse": { "cmd": "zypper search {{termo}}" } } },
+        { "id": "pacotes.show", "title": "Detalhes de um programa", "cmd": "apt show {{pacote}}", "description": "Versão, tamanho e descrição de um pacote.", "params": [{ "name": "pacote", "label": "Pacote", "placeholder": "nginx" }], "tags": ["info", "versao"], "variants": { "rhel": { "cmd": "dnf info {{pacote}}" }, "suse": { "cmd": "zypper info {{pacote}}" } } },
+        { "id": "pacotes.installed", "title": "Programa está instalado?", "cmd": "dpkg -l | grep -i {{pacote}}", "description": "Mostra se o pacote (ou parecidos) está instalado e a versão.", "params": [{ "name": "pacote", "label": "Pacote", "placeholder": "nginx" }], "tags": ["instalado", "versao"], "variants": { "rhel": { "cmd": "rpm -qa | grep -i {{pacote}}" }, "suse": { "cmd": "rpm -qa | grep -i {{pacote}}" } } },
+        { "id": "pacotes.install", "title": "Instalar um programa", "cmd": "sudo apt install {{pacote}}", "description": "Instala o pacote e o que ele precisa. Confirme com Y quando perguntar.", "risk": "caution", "sudo": true, "params": [{ "name": "pacote", "label": "Pacote", "placeholder": "htop" }], "tags": ["install", "instalar"], "variants": { "rhel": { "cmd": "sudo dnf install {{pacote}}" }, "suse": { "cmd": "sudo zypper install {{pacote}}", "description": "Instala o pacote e o que ele precisa. Confirme com y quando perguntar." } } }
       ]
     },
     {
@@ -238,7 +242,7 @@
         { "id": "sistema.hostnamectl", "title": "Informações da máquina", "cmd": "hostnamectl", "description": "Nome, sistema, kernel e se é máquina virtual.", "tags": ["hostname", "vm"] },
         { "id": "sistema.time", "title": "Data, hora e fuso", "cmd": "timedatectl", "description": "Hora atual, fuso horário e se está sincronizado.", "tags": ["hora", "fuso", "ntp"] },
         { "id": "sistema.uptime", "title": "Ligado há quanto tempo", "cmd": "uptime -p", "description": "Tempo desde o último reinício, em texto.", "tags": ["uptime"] },
-        { "id": "sistema.reboot-required", "title": "Precisa reiniciar?", "cmd": "cat /var/run/reboot-required 2>/dev/null || echo \"Nenhuma reinicialização pendente.\"", "description": "Algumas atualizações só valem depois de reiniciar; aqui você descobre se é o caso.", "tags": ["reiniciar", "reboot"] },
+        { "id": "sistema.reboot-required", "title": "Precisa reiniciar?", "cmd": "cat /var/run/reboot-required 2>/dev/null || echo \"Nenhuma reinicialização pendente.\"", "description": "Algumas atualizações só valem depois de reiniciar; aqui você descobre se é o caso.", "tags": ["reiniciar", "reboot"], "variants": { "rhel": { "cmd": "sudo needs-restarting -r", "sudo": true, "description": "Diz se alguma atualização (kernel, glibc, systemd) só vale depois de reiniciar.", "tip": "Vem no pacote dnf-utils (yum-utils no CentOS 7)." }, "suse": { "cmd": "sudo zypper needs-rebooting", "sudo": true, "description": "Diz se alguma atualização só vale depois de reiniciar." } } },
         { "id": "sistema.cron", "title": "Tarefas agendadas (cron)", "cmd": "crontab -l", "description": "Tarefas que rodam automaticamente para o seu usuário.", "tags": ["agendamento", "cron"] },
         { "id": "sistema.env", "title": "Variáveis de ambiente", "cmd": "env | sort", "description": "Configurações do ambiente do terminal (PATH, idioma...).", "tags": ["env", "path"] }
       ]
@@ -249,12 +253,14 @@
       "icon": "Shield20",
       "description": "Tentativas de acesso, firewall e chaves autorizadas.",
       "commands": [
-        { "id": "seguranca.failed", "title": "Senhas erradas no SSH", "cmd": "sudo grep -i \"failed password\" /var/log/auth.log | tail -n 20", "description": "Últimas tentativas de login com senha errada (pode indicar ataque).", "sudo": true, "tags": ["ataque", "login", "falha"] },
+        { "id": "seguranca.failed", "title": "Senhas erradas no SSH", "cmd": "sudo grep -i \"failed password\" /var/log/auth.log | tail -n 20", "description": "Últimas tentativas de login com senha errada (pode indicar ataque).", "sudo": true, "tags": ["ataque", "login", "falha"], "variants": { "rhel": { "cmd": "sudo grep -i \"failed password\" /var/log/secure | tail -n 20" }, "suse": { "cmd": "sudo journalctl _COMM=sshd --no-pager | grep -i \"failed password\" | tail -n 20" } } },
         { "id": "seguranca.lastb", "title": "Logins que falharam", "cmd": "sudo lastb -n 20", "description": "Últimos acessos recusados, com usuário e origem.", "sudo": true, "tags": ["falha", "login"] },
-        { "id": "seguranca.ufw", "title": "Firewall (UFW)", "cmd": "sudo ufw status verbose", "description": "Se o firewall está ativo e quais portas libera.", "sudo": true, "tags": ["firewall", "portas"] },
+        { "id": "seguranca.ufw", "title": "Firewall (UFW)", "cmd": "sudo ufw status verbose", "description": "Se o firewall está ativo e quais portas libera.", "sudo": true, "tags": ["firewall", "portas"], "variants": { "rhel": { "title": "Firewall (firewalld)", "cmd": "sudo firewall-cmd --list-all", "description": "Zona ativa, serviços e portas liberadas no firewalld." }, "suse": { "title": "Firewall (firewalld)", "cmd": "sudo firewall-cmd --list-all", "description": "Zona ativa, serviços e portas liberadas no firewalld (SLES 15 em diante)." } } },
         { "id": "seguranca.fail2ban", "title": "Bloqueios do Fail2ban", "cmd": "sudo fail2ban-client status", "description": "Proteções ativas contra tentativas repetidas de acesso.", "sudo": true, "tags": ["bloqueio", "ban"] },
-        { "id": "seguranca.sudo-log", "title": "Uso recente do sudo", "cmd": "sudo grep sudo /var/log/auth.log | tail -n 20", "description": "Quem usou poderes de administrador e para quê.", "sudo": true, "tags": ["auditoria", "sudo"] },
-        { "id": "seguranca.keys", "title": "Chaves SSH autorizadas", "cmd": "cat ~/.ssh/authorized_keys", "description": "Chaves que podem entrar nesta conta sem senha.", "tags": ["chave", "ssh"] }
+        { "id": "seguranca.sudo-log", "title": "Uso recente do sudo", "cmd": "sudo grep sudo /var/log/auth.log | tail -n 20", "description": "Quem usou poderes de administrador e para quê.", "sudo": true, "tags": ["auditoria", "sudo"], "variants": { "rhel": { "cmd": "sudo grep sudo /var/log/secure | tail -n 20" }, "suse": { "cmd": "sudo journalctl _COMM=sudo -n 20 --no-pager" } } },
+        { "id": "seguranca.keys", "title": "Chaves SSH autorizadas", "cmd": "cat ~/.ssh/authorized_keys", "description": "Chaves que podem entrar nesta conta sem senha.", "tags": ["chave", "ssh"] },
+        { "id": "seguranca.selinux", "title": "SELinux está ativo?", "cmd": "getenforce && sestatus | head -n 6", "description": "Modo do SELinux: Enforcing bloqueia o que foge das regras e explica muito \"permission denied\" mesmo com permissão certa.", "os": ["rhel"], "tags": ["selinux", "permissao", "bloqueio"] },
+        { "id": "seguranca.apparmor", "title": "Perfis do AppArmor", "cmd": "sudo aa-status | head -n 20", "description": "Programas limitados pelo AppArmor (pode bloquear acessos mesmo com permissão de arquivo certa).", "sudo": true, "os": ["debian", "suse"], "tags": ["apparmor", "permissao", "bloqueio"] }
       ]
     },
     {
@@ -267,9 +273,9 @@
         { "id": "web.nginx-reload", "title": "Recarregar o Nginx", "cmd": "sudo nginx -t && sudo systemctl reload nginx", "description": "Testa e, se estiver tudo certo, aplica a nova configuração sem derrubar o site.", "risk": "caution", "sudo": true, "tags": ["nginx", "reload"] },
         { "id": "web.nginx-errors", "title": "Erros do Nginx", "cmd": "sudo tail -n 100 /var/log/nginx/error.log", "description": "As 100 últimas linhas do log de erros.", "sudo": true, "tags": ["nginx", "erro", "502"] },
         { "id": "web.nginx-access", "title": "Acessos do Nginx ao vivo", "cmd": "sudo tail -f /var/log/nginx/access.log", "description": "Cada requisição ao site, assim que acontece.", "tip": "Ctrl+C para parar.", "sudo": true, "tags": ["nginx", "acessos"] },
-        { "id": "web.nginx-sites", "title": "Sites ativos do Nginx", "cmd": "ls -l /etc/nginx/sites-enabled/", "description": "Configurações de site habilitadas.", "tags": ["nginx", "vhost"] },
+        { "id": "web.nginx-sites", "title": "Sites ativos do Nginx", "cmd": "ls -l /etc/nginx/sites-enabled/", "description": "Configurações de site habilitadas.", "tags": ["nginx", "vhost"], "variants": { "rhel": { "cmd": "ls -l /etc/nginx/conf.d/", "description": "Configurações de site (nesta família ficam em conf.d)." }, "suse": { "cmd": "ls -l /etc/nginx/conf.d/ /etc/nginx/vhosts.d/ 2>/dev/null", "description": "Configurações de site (conf.d e vhosts.d)." } } },
         { "id": "web.apache-test", "title": "Testar configuração do Apache", "cmd": "sudo apachectl configtest", "description": "Confere a configuração do Apache.", "sudo": true, "tags": ["apache", "config"] },
-        { "id": "web.apache-errors", "title": "Erros do Apache", "cmd": "sudo tail -n 100 /var/log/apache2/error.log", "description": "As 100 últimas linhas do log de erros do Apache.", "sudo": true, "tags": ["apache", "erro"] },
+        { "id": "web.apache-errors", "title": "Erros do Apache", "cmd": "sudo tail -n 100 /var/log/apache2/error.log", "description": "As 100 últimas linhas do log de erros do Apache.", "sudo": true, "tags": ["apache", "erro"], "variants": { "rhel": { "cmd": "sudo tail -n 100 /var/log/httpd/error_log" }, "suse": { "cmd": "sudo tail -n 100 /var/log/apache2/error_log" } } },
         { "id": "web.php-v", "title": "Versão do PHP", "cmd": "php -v", "description": "Versão do PHP de linha de comando.", "tags": ["php", "versao"] },
         { "id": "web.php-m", "title": "Extensões do PHP", "cmd": "php -m", "description": "Módulos carregados (mysqli, redis, gd...).", "tags": ["php", "modulos"] }
       ]
@@ -288,6 +294,159 @@
         { "id": "laravel.log-follow", "title": "Log do Laravel ao vivo", "cmd": "tail -f storage/logs/laravel.log", "description": "Acompanha o log da aplicação em tempo real.", "tip": "Ctrl+C para parar.", "tags": ["log", "acompanhar"] },
         { "id": "laravel.optimize-clear", "title": "Limpar caches", "cmd": "php artisan optimize:clear", "description": "Limpa caches de configuração, rotas, views e eventos. Útil depois de mudar o .env.", "risk": "caution", "tags": ["cache", "limpar"] },
         { "id": "laravel.composer", "title": "Versão do Composer", "cmd": "composer --version", "description": "Versão do gerenciador de pacotes do PHP.", "tags": ["composer"] }
+      ]
+    },
+    {
+      "id": "sap",
+      "name": "SAP (HANA, NetWeaver e Business One)",
+      "icon": "BuildingFactory20",
+      "description": "Instâncias SAP, banco HANA e serviços do SAP Business One. Os comandos do HANA rodam como o usuário <sid>adm (ex.: ndbadm).",
+      "commands": [
+        { "id": "sap.instances", "title": "Instâncias SAP deste servidor", "cmd": "/usr/sap/hostctrl/exe/saphostctrl -function ListInstances", "description": "SID, número e servidor de cada instância registrada no SAP Host Agent.", "tags": ["sid", "instancia", "hostagent"] },
+        { "id": "sap.processes", "title": "Processos de uma instância", "cmd": "/usr/sap/hostctrl/exe/sapcontrol -nr {{instancia}} -function GetProcessList", "description": "Cada processo com o estado: GREEN rodando, YELLOW iniciando ou com aviso, RED com erro, GRAY parado.", "params": [{ "name": "instancia", "label": "Número da instância", "default": "00", "type": "number" }], "tags": ["sapcontrol", "status", "processos"] },
+        { "id": "sap.system", "title": "Estado de todas as instâncias do sistema", "cmd": "/usr/sap/hostctrl/exe/sapcontrol -nr {{instancia}} -function GetSystemInstanceList", "description": "Todas as instâncias do sistema SAP (inclusive de outros servidores) e se estão no ar.", "params": [{ "name": "instancia", "label": "Número da instância", "default": "00", "type": "number" }], "tags": ["sapcontrol", "status"] },
+        { "id": "sap.version", "title": "Versão do kernel SAP", "cmd": "/usr/sap/hostctrl/exe/sapcontrol -nr {{instancia}} -function GetVersionInfo", "description": "Versão e patch do kernel da instância.", "params": [{ "name": "instancia", "label": "Número da instância", "default": "00", "type": "number" }], "tags": ["kernel", "versao"] },
+        { "id": "sap.sapservices", "title": "Instâncias que sobem com o servidor", "cmd": "cat /usr/sap/sapservices", "description": "Lista do sapstartsrv de cada instância iniciada no boot.", "tags": ["boot", "sapstartsrv"] },
+        { "id": "sap.hana-info", "title": "Processos do HANA (HDB info)", "cmd": "sudo su - {{sid}}adm -c 'HDB info'", "description": "Processos do banco HANA (nameserver, indexserver...) e quem está rodando.", "sudo": true, "params": [{ "name": "sid", "label": "SID em minúsculas", "placeholder": "ndb" }], "tags": ["hana", "banco", "hdb"] },
+        { "id": "sap.hana-version", "title": "Versão do HANA", "cmd": "sudo su - {{sid}}adm -c 'HDB version'", "description": "Versão, revisão e data de compilação do banco HANA.", "sudo": true, "params": [{ "name": "sid", "label": "SID em minúsculas", "placeholder": "ndb" }], "tags": ["hana", "versao"] },
+        { "id": "sap.hana-sr", "title": "Replicação do HANA (System Replication)", "cmd": "sudo su - {{sid}}adm -c 'hdbnsutil -sr_state'", "description": "Se este nó é primário ou secundário e o estado da replicação.", "sudo": true, "params": [{ "name": "sid", "label": "SID em minúsculas", "placeholder": "ndb" }], "tags": ["hana", "replicacao", "hsr", "cluster"] },
+        { "id": "sap.hana-disk", "title": "Espaço das áreas do HANA", "cmd": "df -h /hana/data /hana/log /hana/shared 2>/dev/null", "description": "Uso das partições de dados, log e compartilhada. Log cheio para o banco.", "tags": ["hana", "disco", "espaco"] },
+        { "id": "sap.tuning", "title": "Ajustes do sistema para SAP", "cmd": "sudo saptune status", "description": "Se o saptune está ativo e quais soluções e notas SAP estão aplicadas.", "sudo": true, "os": ["suse", "rhel"], "variants": { "rhel": { "title": "Perfil de ajuste para SAP (tuned)", "cmd": "tuned-adm active", "sudo": false, "description": "Perfil ativo do tuned (para SAP: sap-hana ou sap-netweaver)." } }, "tags": ["saptune", "tuned", "desempenho"] },
+        { "id": "sap.b1-servertools", "title": "Server Tools do SAP Business One", "cmd": "systemctl status sapb1servertools --no-pager", "description": "Serviços do B1 (SLD, licença, extensões). Parado, ninguém entra no B1.", "tags": ["b1", "business one", "sld", "licenca"] },
+        { "id": "sap.b1-servicelayer", "title": "Service Layer do SAP Business One", "cmd": "systemctl status b1s --no-pager", "description": "API REST do B1 usada por integrações e pelo B1 Web Client.", "tags": ["b1", "service layer", "api"] },
+        { "id": "sap.b1-servicelayer-restart", "title": "Reiniciar o Service Layer do B1", "cmd": "sudo systemctl restart b1s", "description": "Reinicia a API do B1: integrações e o Web Client param por alguns segundos.", "risk": "caution", "sudo": true, "tags": ["b1", "service layer", "reiniciar"] },
+        { "id": "sap.b1-servertools-restart", "title": "Reiniciar o Server Tools do B1", "cmd": "sudo systemctl restart sapb1servertools", "description": "Reinicia SLD e licença do B1: quem está conectado pode precisar entrar de novo.", "risk": "caution", "sudo": true, "tags": ["b1", "sld", "reiniciar"] }
+      ]
+    },
+    {
+      "id": "win-run",
+      "name": "Atalhos do Windows (Win+R)",
+      "icon": "Keyboard20",
+      "description": "Abre a ferramenta neste computador, como Win+R. Numa Área de Trabalho Remota o nome é copiado: lá, aperte Win+R, cole e Enter.",
+      "os": ["windows"],
+      "commands": [
+        { "id": "win-run.ncpa", "title": "Conexões de rede", "cmd": "ncpa.cpl", "description": "Placas de rede: IP, DNS, gateway, ativar e desativar.", "run": true, "tags": ["rede", "ip", "dns", "placa"] },
+        { "id": "win-run.services", "title": "Serviços", "cmd": "services.msc", "description": "Iniciar, parar e configurar os serviços do Windows.", "run": true, "tags": ["servicos"] },
+        { "id": "win-run.eventvwr", "title": "Visualizador de Eventos", "cmd": "eventvwr.msc", "description": "Logs do Windows: erros de sistema, aplicações e segurança.", "run": true, "tags": ["logs", "eventos", "erros"] },
+        { "id": "win-run.taskmgr", "title": "Gerenciador de Tarefas", "cmd": "taskmgr", "description": "Processos, desempenho, usuários e programas que iniciam com o Windows.", "run": true, "tags": ["processos", "cpu", "memoria"] },
+        { "id": "win-run.resmon", "title": "Monitor de Recursos", "cmd": "resmon", "description": "CPU, memória, disco e rede por processo (quem está usando o disco ou a rede).", "run": true, "tags": ["desempenho", "disco", "rede"] },
+        { "id": "win-run.compmgmt", "title": "Gerenciamento do Computador", "cmd": "compmgmt.msc", "description": "Discos, usuários locais, pastas compartilhadas, serviços e eventos num lugar só.", "run": true, "tags": ["administracao"] },
+        { "id": "win-run.diskmgmt", "title": "Gerenciamento de Disco", "cmd": "diskmgmt.msc", "description": "Discos e partições: tamanho, letra e espaço livre.", "run": true, "tags": ["disco", "particao"] },
+        { "id": "win-run.devmgmt", "title": "Gerenciador de Dispositivos", "cmd": "devmgmt.msc", "description": "Hardware e drivers (o que está com erro aparece com aviso).", "run": true, "tags": ["drivers", "hardware"] },
+        { "id": "win-run.appwiz", "title": "Programas instalados", "cmd": "appwiz.cpl", "description": "Desinstalar ou alterar programas.", "run": true, "tags": ["programas", "desinstalar"] },
+        { "id": "win-run.sysdm", "title": "Propriedades do Sistema", "cmd": "sysdm.cpl", "description": "Nome do computador, domínio, acesso remoto e variáveis de ambiente.", "run": true, "tags": ["nome", "dominio", "rdp"] },
+        { "id": "win-run.lusrmgr", "title": "Usuários e grupos locais", "cmd": "lusrmgr.msc", "description": "Contas locais e grupos (Administradores, Usuários da Área de Trabalho Remota...).", "run": true, "tip": "Não existe nas edições Home.", "tags": ["usuarios", "grupos"] },
+        { "id": "win-run.firewall", "title": "Firewall com segurança avançada", "cmd": "wf.msc", "description": "Regras de entrada e saída do firewall.", "run": true, "tags": ["firewall", "portas"] },
+        { "id": "win-run.msinfo", "title": "Informações do Sistema", "cmd": "msinfo32", "description": "Modelo, processador, memória, BIOS e versão do Windows.", "run": true, "tags": ["hardware", "versao"] },
+        { "id": "win-run.winver", "title": "Versão do Windows", "cmd": "winver", "description": "Edição, versão e build do Windows.", "run": true, "tags": ["versao", "build"] },
+        { "id": "win-run.control", "title": "Painel de Controle", "cmd": "control", "description": "O Painel de Controle clássico.", "run": true, "tags": ["painel"] },
+        { "id": "win-run.printers", "title": "Impressoras", "cmd": "control printers", "description": "Impressoras e dispositivos instalados.", "run": true, "tags": ["impressora"] },
+        { "id": "win-run.inetcpl", "title": "Opções da Internet (proxy)", "cmd": "inetcpl.cpl", "description": "Proxy, certificados e opções de conexão usados pelo Windows.", "run": true, "tags": ["proxy", "internet"] },
+        { "id": "win-run.timedate", "title": "Data e hora", "cmd": "timedate.cpl", "description": "Fuso horário e sincronização do relógio.", "run": true, "tags": ["hora", "fuso"] },
+        { "id": "win-run.mstsc", "title": "Conexão de Área de Trabalho Remota", "cmd": "mstsc", "description": "O cliente de RDP do Windows.", "run": true, "tags": ["rdp", "remoto"] },
+        { "id": "win-run.regedit", "title": "Editor do Registro", "cmd": "regedit", "description": "Configurações internas do Windows.", "run": true, "tip": "Altere só sabendo o que faz: não há \"desfazer\".", "tags": ["registro"] },
+        { "id": "win-run.gpedit", "title": "Política de Grupo local", "cmd": "gpedit.msc", "description": "Políticas locais da máquina.", "run": true, "tip": "Só nas edições Pro, Enterprise e Server.", "tags": ["politica", "gpo"] },
+        { "id": "win-run.cleanmgr", "title": "Limpeza de Disco", "cmd": "cleanmgr", "description": "Apaga temporários, lixeira e restos de atualizações com segurança.", "run": true, "tags": ["disco", "espaco", "limpar"] },
+        { "id": "win-run.temp", "title": "Pasta de arquivos temporários", "cmd": "%temp%", "description": "Abre a pasta TEMP do usuário (pode ser limpa com os programas fechados).", "run": true, "tags": ["temp", "espaco"] },
+        { "id": "win-run.startup", "title": "Programas que abrem com o Windows", "cmd": "shell:startup", "description": "Pasta Inicializar do usuário: atalhos aqui abrem ao entrar.", "run": true, "tags": ["inicializar", "boot"] },
+        { "id": "win-run.dsa", "title": "Usuários e Computadores do AD", "cmd": "dsa.msc", "description": "Contas, grupos e computadores do Active Directory.", "run": true, "tip": "Precisa das Ferramentas de Administração (RSAT) ou de um controlador de domínio.", "tags": ["ad", "dominio", "usuarios"] }
+      ]
+    },
+    {
+      "id": "win-rede",
+      "name": "Rede (Windows)",
+      "icon": "Globe20",
+      "description": "IP, DNS, portas e conectividade no Windows (CMD ou PowerShell).",
+      "os": ["windows"],
+      "commands": [
+        { "id": "win-rede.ipconfig", "title": "IP, DNS e gateway", "cmd": "ipconfig /all", "description": "Configuração de todas as placas: IP, máscara, gateway, DNS e DHCP.", "tags": ["ip", "dns", "gateway"] },
+        { "id": "win-rede.flushdns", "title": "Limpar o cache de DNS", "cmd": "ipconfig /flushdns", "description": "Esquece os endereços guardados (útil depois de trocar um DNS).", "tags": ["dns", "cache"] },
+        { "id": "win-rede.ping", "title": "Testar se responde (ping)", "cmd": "ping -n 4 {{host}}", "description": "Quatro pings: mostra se o servidor responde e em quanto tempo.", "params": [{ "name": "host", "label": "Servidor ou IP", "placeholder": "srv-sap01" }], "tags": ["ping", "conexao"] },
+        { "id": "win-rede.port", "title": "Testar uma porta", "cmd": "Test-NetConnection {{host}} -Port {{porta}}", "description": "Se a porta está aberta (TcpTestSucceeded: True), como um telnet.", "powerShell": true, "params": [{ "name": "host", "label": "Servidor ou IP", "placeholder": "srv-sap01" }, { "name": "porta", "label": "Porta", "placeholder": "30015", "type": "number" }], "tags": ["porta", "telnet", "firewall"] },
+        { "id": "win-rede.trace", "title": "Caminho até um servidor", "cmd": "tracert -d {{host}}", "description": "Cada salto da rede até o destino (onde a conexão para ou fica lenta).", "params": [{ "name": "host", "label": "Servidor ou IP", "placeholder": "srv-sap01" }], "tags": ["rota", "tracert"] },
+        { "id": "win-rede.dns", "title": "Consultar DNS", "cmd": "nslookup {{dominio}}", "description": "Qual IP um nome resolve e qual servidor DNS respondeu.", "params": [{ "name": "dominio", "label": "Nome", "placeholder": "srv-sap01.empresa.local" }], "tags": ["dns", "resolver"] },
+        { "id": "win-rede.listening", "title": "Portas abertas neste servidor", "cmd": "Get-NetTCPConnection -State Listen | Sort-Object LocalPort | Select-Object LocalAddress,LocalPort,OwningProcess", "description": "Portas TCP esperando conexão e o PID do programa de cada uma.", "powerShell": true, "tags": ["portas", "listen"] },
+        { "id": "win-rede.port-pid", "title": "Quem está usando uma porta", "cmd": "netstat -ano | findstr :{{porta}}", "description": "Conexões na porta com o PID (última coluna). Veja o programa com \"Procurar processo pelo nome\".", "params": [{ "name": "porta", "label": "Porta", "placeholder": "30015", "type": "number" }], "tags": ["porta", "pid", "netstat"] },
+        { "id": "win-rede.routes", "title": "Tabela de rotas", "cmd": "route print -4", "description": "Rotas IPv4: por onde o tráfego sai para cada rede.", "tags": ["rota", "gateway"] },
+        { "id": "win-rede.arp", "title": "Vizinhos na rede (ARP)", "cmd": "arp -a", "description": "IPs e endereços MAC vistos recentemente na rede local.", "tags": ["mac", "arp"] }
+      ]
+    },
+    {
+      "id": "win-sistema",
+      "name": "Sistema (Windows)",
+      "icon": "Info20",
+      "description": "Versão, atualizações, políticas e quem está conectado.",
+      "os": ["windows"],
+      "commands": [
+        { "id": "win-sistema.info", "title": "Resumo do sistema", "cmd": "systeminfo", "description": "Versão do Windows, último boot, memória, domínio e atualizações instaladas.", "tags": ["versao", "boot", "memoria"] },
+        { "id": "win-sistema.boot", "title": "Ligado desde quando", "cmd": "(Get-CimInstance Win32_OperatingSystem).LastBootUpTime", "description": "Data e hora do último boot.", "powerShell": true, "tags": ["boot", "uptime", "reiniciou"] },
+        { "id": "win-sistema.hotfix", "title": "Últimas atualizações instaladas", "cmd": "Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 10", "description": "As 10 atualizações (KB) mais recentes e quando entraram.", "powerShell": true, "tags": ["atualizacao", "kb", "patch"] },
+        { "id": "win-sistema.hostname", "title": "Nome do computador", "cmd": "hostname", "description": "Nome deste computador na rede.", "tags": ["nome"] },
+        { "id": "win-sistema.whoami", "title": "Quem sou eu e meus grupos", "cmd": "whoami /groups", "description": "Seu usuário e os grupos (inclusive se está como administrador).", "tags": ["usuario", "grupos", "admin"] },
+        { "id": "win-sistema.sessions", "title": "Quem está conectado", "cmd": "query user", "description": "Sessões abertas no servidor (Área de Trabalho Remota), com ID e tempo ocioso.", "tags": ["rdp", "sessoes", "usuarios"] },
+        { "id": "win-sistema.gpresult", "title": "Políticas aplicadas (GPO)", "cmd": "gpresult /r", "description": "Quais políticas de grupo valem para este computador e usuário.", "tags": ["gpo", "politica", "dominio"] },
+        { "id": "win-sistema.gpupdate", "title": "Aplicar as políticas agora", "cmd": "gpupdate /force", "description": "Busca e aplica as políticas de grupo do domínio na hora.", "risk": "caution", "tags": ["gpo", "politica"] }
+      ]
+    },
+    {
+      "id": "win-servicos",
+      "name": "Serviços e processos (Windows)",
+      "icon": "Settings20",
+      "description": "Serviços do Windows e programas em execução.",
+      "os": ["windows"],
+      "commands": [
+        { "id": "win-servicos.running", "title": "Serviços rodando", "cmd": "Get-Service | Where-Object Status -eq Running | Sort-Object DisplayName", "description": "Todos os serviços em execução, em ordem alfabética.", "powerShell": true, "tags": ["servicos", "rodando"] },
+        { "id": "win-servicos.status", "title": "Estado de um serviço", "cmd": "sc query {{servico}}", "description": "Se o serviço está rodando, parado ou com erro.", "params": [{ "name": "servico", "label": "Nome do serviço", "placeholder": "Spooler" }], "tags": ["servico", "status"] },
+        { "id": "win-servicos.restart", "title": "Reiniciar um serviço", "cmd": "Restart-Service {{servico}}", "description": "Para e inicia o serviço (precisa de PowerShell como administrador).", "risk": "caution", "powerShell": true, "params": [{ "name": "servico", "label": "Nome do serviço", "placeholder": "Spooler" }], "tags": ["servico", "reiniciar"] },
+        { "id": "win-servicos.start", "title": "Iniciar um serviço", "cmd": "Start-Service {{servico}}", "description": "Inicia o serviço parado (como administrador).", "risk": "caution", "powerShell": true, "params": [{ "name": "servico", "label": "Nome do serviço", "placeholder": "Spooler" }], "tags": ["servico", "iniciar"] },
+        { "id": "win-servicos.stop", "title": "Parar um serviço", "cmd": "Stop-Service {{servico}}", "description": "Para o serviço (como administrador).", "risk": "caution", "powerShell": true, "params": [{ "name": "servico", "label": "Nome do serviço", "placeholder": "Spooler" }], "tags": ["servico", "parar"] },
+        { "id": "win-servicos.find", "title": "Procurar processo pelo nome", "cmd": "tasklist | findstr /i {{nome}}", "description": "Processos cujo nome contém o texto, com PID e memória.", "params": [{ "name": "nome", "label": "Nome", "placeholder": "sqlservr" }], "tags": ["processo", "pid"] },
+        { "id": "win-servicos.top-cpu", "title": "Processos que mais usaram CPU", "cmd": "Get-Process | Sort-Object CPU -Descending | Select-Object -First 15 Name,Id,CPU,WS", "description": "Os 15 processos com mais tempo de CPU (WS = memória em bytes).", "powerShell": true, "tags": ["cpu", "lento", "pesado"] },
+        { "id": "win-servicos.top-mem", "title": "Processos que mais usam memória", "cmd": "Get-Process | Sort-Object WS -Descending | Select-Object -First 15 Name,Id,WS", "description": "Os 15 processos que mais ocupam RAM (WS em bytes).", "powerShell": true, "tags": ["memoria", "ram", "pesado"] },
+        { "id": "win-servicos.kill", "title": "Encerrar processo", "cmd": "taskkill /PID {{pid}}", "description": "Pede para o processo fechar.", "risk": "caution", "params": [{ "name": "pid", "label": "PID", "type": "number", "placeholder": "4321" }], "tags": ["encerrar", "travado"] },
+        { "id": "win-servicos.kill-force", "title": "Forçar encerramento", "cmd": "taskkill /PID {{pid}} /F", "description": "Fecha na hora, sem dar chance de salvar. Use se \"Encerrar processo\" não resolveu.", "risk": "caution", "params": [{ "name": "pid", "label": "PID", "type": "number", "placeholder": "4321" }], "tags": ["encerrar", "forcar"] }
+      ]
+    },
+    {
+      "id": "win-disco",
+      "name": "Disco (Windows)",
+      "icon": "HardDrive20",
+      "description": "Espaço livre e o que está ocupando o disco.",
+      "os": ["windows"],
+      "commands": [
+        { "id": "win-disco.free", "title": "Espaço livre nas unidades", "cmd": "Get-PSDrive -PSProvider FileSystem", "description": "Usado e livre de cada unidade (C:, D:...), em bytes.", "powerShell": true, "tags": ["espaco", "livre", "cheio"] },
+        { "id": "win-disco.volumes", "title": "Volumes e saúde", "cmd": "Get-Volume", "description": "Cada volume com sistema de arquivos, saúde e espaço.", "powerShell": true, "tags": ["volume", "saude"] },
+        { "id": "win-disco.big-files", "title": "Maiores arquivos de uma pasta", "cmd": "Get-ChildItem {{pasta}} -Recurse -File -ErrorAction SilentlyContinue | Sort-Object Length -Descending | Select-Object -First 20 FullName,Length", "description": "Os 20 maiores arquivos (pode demorar em pastas grandes).", "powerShell": true, "params": [{ "name": "pasta", "label": "Pasta", "default": "C:\\" }], "tags": ["grandes", "cheio", "espaco"] },
+        { "id": "win-disco.chkdsk", "title": "Verificar erros no disco (só leitura)", "cmd": "chkdsk {{unidade}}", "description": "Procura erros sem corrigir nada (como administrador).", "params": [{ "name": "unidade", "label": "Unidade", "default": "C:" }], "tags": ["erros", "disco"] }
+      ]
+    },
+    {
+      "id": "win-logs",
+      "name": "Logs e eventos (Windows)",
+      "icon": "DocumentText20",
+      "description": "Eventos do Windows sem abrir o Visualizador de Eventos.",
+      "os": ["windows"],
+      "commands": [
+        { "id": "win-logs.system", "title": "Últimos eventos do sistema", "cmd": "Get-WinEvent -LogName System -MaxEvents 30", "description": "Os 30 eventos mais recentes do log System.", "powerShell": true, "tags": ["eventos", "sistema"] },
+        { "id": "win-logs.system-errors", "title": "Erros do sistema", "cmd": "Get-WinEvent -FilterHashtable @{LogName='System';Level=2} -MaxEvents 30", "description": "Só os erros do log System (serviços que falharam, discos, drivers).", "powerShell": true, "tags": ["erros", "sistema"] },
+        { "id": "win-logs.app-errors", "title": "Erros de aplicações", "cmd": "Get-WinEvent -FilterHashtable @{LogName='Application';Level=2} -MaxEvents 30", "description": "Erros dos programas (SQL Server, SAP B1, IIS...).", "powerShell": true, "tags": ["erros", "aplicacao", "sql"] },
+        { "id": "win-logs.reboots", "title": "Reinicializações e desligamentos", "cmd": "Get-WinEvent -FilterHashtable @{LogName='System';Id=1074,6008} -MaxEvents 10", "description": "Quem reiniciou (1074) e desligamentos inesperados (6008).", "powerShell": true, "tags": ["reboot", "reiniciou", "queda"] },
+        { "id": "win-logs.failed-logins", "title": "Logins com senha errada", "cmd": "Get-WinEvent -FilterHashtable @{LogName='Security';Id=4625} -MaxEvents 20", "description": "Tentativas de login que falharam (precisa de administrador).", "powerShell": true, "tags": ["login", "senha", "seguranca"] },
+        { "id": "win-logs.tail", "title": "Acompanhar um arquivo de log", "cmd": "Get-Content {{arquivo}} -Tail 50 -Wait", "description": "Mostra o fim do arquivo e as linhas novas ao vivo (como tail -f). Ctrl+C para sair.", "powerShell": true, "params": [{ "name": "arquivo", "label": "Arquivo", "placeholder": "C:\\inetpub\\logs\\app.log" }], "tags": ["tail", "acompanhar"] }
+      ]
+    },
+    {
+      "id": "win-usuarios",
+      "name": "Usuários (Windows)",
+      "icon": "Person20",
+      "description": "Contas locais, do domínio e grupos.",
+      "os": ["windows"],
+      "commands": [
+        { "id": "win-usuarios.local", "title": "Usuários locais", "cmd": "net user", "description": "Contas locais deste computador.", "tags": ["usuarios", "contas"] },
+        { "id": "win-usuarios.detail", "title": "Detalhes de um usuário", "cmd": "net user {{usuario}}", "description": "Se está ativo, quando a senha expira, último login e grupos.", "params": [{ "name": "usuario", "label": "Usuário", "placeholder": "fabio" }], "tags": ["usuario", "senha", "expira"] },
+        { "id": "win-usuarios.domain", "title": "Usuário do domínio", "cmd": "net user {{usuario}} /domain", "description": "Os mesmos detalhes, consultando o Active Directory.", "params": [{ "name": "usuario", "label": "Usuário", "placeholder": "fabio" }], "tags": ["ad", "dominio", "senha"] },
+        { "id": "win-usuarios.admins", "title": "Administradores deste computador", "cmd": "net localgroup administrators", "description": "Quem é membro do grupo Administradores local.", "tags": ["admin", "grupo"] },
+        { "id": "win-usuarios.rdp-group", "title": "Quem pode entrar por RDP", "cmd": "net localgroup \"Remote Desktop Users\"", "description": "Membros do grupo Usuários da Área de Trabalho Remota (em Windows em português o nome pode ser \"Usuários da área de trabalho remota\").", "tags": ["rdp", "grupo", "acesso"] }
       ]
     }
   ]

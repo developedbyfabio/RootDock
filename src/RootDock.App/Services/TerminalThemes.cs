@@ -24,6 +24,11 @@ public static class TerminalThemes
         Theme("grafite", "Grafite", "#1a1b1e", "#d4d4d4", "#e6e6e6", "#3a3d44",
             ["#26282c", "#e06c6c", "#8fbf7f", "#d9b56c", "#6fa3d9", "#b48ead", "#6cc1c1", "#c8c8c8"],
             ["#6b6e75", "#f08a8a", "#a8d698", "#ecca85", "#8cbbea", "#c9a3c2", "#88d6d6", "#f0f0f0"]),
+        // Preto puro. O "preto" do ANSI fica um pouco acima do fundo (#1E1E1E) para texto preto em
+        // fundo colorido continuar legível, e o "preto claro" (#6E6E6E) servir de cinza.
+        Theme("black", "Black", "#000000", "#e6e6e6", "#f2f2f2", "#264f78",
+            ["#1e1e1e", "#f14c4c", "#23d18b", "#e5c07b", "#3b8eea", "#c678dd", "#29b8db", "#cccccc"],
+            ["#6e6e6e", "#ff6b6b", "#5af78e", "#f4f99d", "#6cb6ff", "#e09cf0", "#7fdbff", "#ffffff"]),
         Theme("oceano", "Oceano", "#0b1622", "#cfe3f2", "#4fc3f7", "#1d3a55",
             ["#13212f", "#ff6b81", "#7bd389", "#f5c26b", "#4fa8f7", "#a78bfa", "#4fd1c5", "#b9cfe0"],
             ["#4b6278", "#ff8fa0", "#9de3a8", "#ffd68f", "#79c0ff", "#c4b0ff", "#7ee6dc", "#eaf4fb"]),

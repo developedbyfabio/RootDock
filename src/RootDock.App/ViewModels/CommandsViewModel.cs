@@ -43,11 +43,13 @@ public sealed partial class CommandParamViewModel : ObservableObject
 /// <summary>Um comando da biblioteca (ou do usuário) pronto para a tela.</summary>
 public sealed partial class CommandItemViewModel : ObservableObject
 {
-    public CommandItemViewModel(CommandDefinition definition, string categoryName, bool isCustom)
+    public CommandItemViewModel(CommandDefinition definition, string categoryName, bool isCustom, bool isMacro = false, string? family = null)
     {
         Definition = definition;
         CategoryName = categoryName;
         IsCustom = isCustom;
+        IsMacro = isMacro;
+        Family = family;
         Params = new ObservableCollection<CommandParamViewModel>(definition.Params.Select(p => new CommandParamViewModel(p, UpdatePreview)));
         _preview = definition.DisplayCommand;
         SearchText = Normalize(string.Join(' ', new[] { definition.Title, definition.Cmd, definition.Description, categoryName }.Concat(definition.Tags)));
@@ -72,6 +74,26 @@ public sealed partial class CommandItemViewModel : ObservableObject
     public string CategoryName { get; }
 
     public bool IsCustom { get; }
+
+    /// <summary>Macro (Ferramentas → Macros): o clique executa os passos em sequência.</summary>
+    public bool IsMacro { get; }
+
+    /// <summary>Família de sistema do comando (null = do usuário, vale em qualquer terminal).</summary>
+    public string? Family { get; }
+
+    public bool IsWindows => Family == OsFamily.Windows;
+
+    /// <summary>Atalho Win+R: abre o programa no computador em vez de digitar no terminal.</summary>
+    public bool IsRun => Definition.Run;
+
+    /// <summary>Comando do Windows que só existe no PowerShell (selo na tela).</summary>
+    public bool IsPowerShell => IsWindows && Definition.PowerShell;
+
+    /// <summary>"Colocar no terminal sem executar" não vale para macro (são vários passos) nem para Win+R.</summary>
+    public bool CanPaste => !IsMacro && !IsRun;
+
+    /// <summary>O que "Copiar" leva (macro: só os comandos, um por linha); null = o comando.</summary>
+    public string? CopyText { get; init; }
 
     public bool IsCaution => Definition.IsCaution;
 
@@ -100,7 +122,7 @@ public sealed partial class CommandItemViewModel : ObservableObject
 
         try
         {
-            var text = CommandTemplate.Render(Definition, Params.ToDictionary(p => p.Parameter.Name, p => p.Value));
+            var text = CommandTemplate.Render(Definition, Params.ToDictionary(p => p.Parameter.Name, p => p.Value), IsWindows);
             Error = "";
             return text;
         }
@@ -115,7 +137,7 @@ public sealed partial class CommandItemViewModel : ObservableObject
     {
         try
         {
-            Preview = CommandTemplate.Render(Definition, Params.ToDictionary(p => p.Parameter.Name, p => p.Value));
+            Preview = CommandTemplate.Render(Definition, Params.ToDictionary(p => p.Parameter.Name, p => p.Value), IsWindows);
             Error = "";
         }
         catch (CommandRenderException)
@@ -139,6 +161,17 @@ public sealed partial class CommandItemViewModel : ObservableObject
 
         return builder.ToString();
     }
+}
+
+/// <summary>Opção do seletor "Sistema" do painel de comandos.</summary>
+public sealed partial class OsChoice(string id, string label) : ObservableObject
+{
+    public string Id { get; } = id;
+
+    [ObservableProperty] private string _label = label;
+
+    /// <summary>Nome lido pelo leitor de tela e pela automação (o ComboBox usa ToString nos itens).</summary>
+    public override string ToString() => Label;
 }
 
 public sealed partial class CommandCategoryViewModel : ObservableObject
@@ -167,46 +200,114 @@ public sealed partial class CommandsViewModel : ObservableObject
 {
     private const int MaxRecent = 8;
 
+    private const string Auto = "auto";
+
     private readonly AppSettings _settings;
     private readonly Action _save;
-    private readonly List<CommandCategoryViewModel> _builtIn;
+    private readonly CommandLibrary _library;
+    private readonly Dictionary<string, List<CommandCategoryViewModel>> _byFamily = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CommandItemViewModel> _byId = new(StringComparer.Ordinal);
     private readonly HashSet<string> _expanded = new(StringComparer.Ordinal);
+    private readonly OsChoice _autoChoice = new(Auto, "Automático");
+    private List<CommandCategoryViewModel> _builtIn = [];
+    private string _family = "";
+    private string? _detectedFamily;
+    private string? _detectedLabel;
 
     public CommandsViewModel(CommandLibrary library, AppSettings settings, Action save)
     {
+        _library = library;
         _settings = settings;
         _save = save;
-        _builtIn = library.Categories.Select(c =>
+        OsChoices = [_autoChoice, .. OsFamily.All.Select(f => new OsChoice(f, OsFamily.Label(f)))];
+        _selectedOsChoice = OsChoices.FirstOrDefault(c => c.Id == settings.CommandsOs) ?? _autoChoice;
+
+        // Tudo começa recolhido: a pessoa vê os temas e abre o que quiser.
+        ApplyFamily(force: true);
+    }
+
+    /// <summary>Seletor "Sistema": Automático (segue o terminal em foco) ou uma família fixa.</summary>
+    public ObservableCollection<OsChoice> OsChoices { get; }
+
+    [ObservableProperty] private OsChoice _selectedOsChoice;
+
+    partial void OnSelectedOsChoiceChanged(OsChoice value)
+    {
+        _settings.CommandsOs = value.Id;
+        _save();
+        ApplyFamily();
+    }
+
+    /// <summary>Família dos comandos mostrados agora (debian, rhel, suse ou windows).</summary>
+    public string Family => _family;
+
+    /// <summary>A família mudou (escolha no seletor ou outro terminal em foco no modo automático).</summary>
+    public event Action? FamilyChanged;
+
+    /// <summary>
+    /// Sistema do terminal em foco (null = não dá para saber, ex.: Telnet: fica o que estava).
+    /// No modo automático, a lista passa a ser a dessa família.
+    /// </summary>
+    public void SetDetected(string? family, string? label)
+    {
+        if (family is null || (family == _detectedFamily && label == _detectedLabel))
+        {
+            return;
+        }
+
+        _detectedFamily = family;
+        _detectedLabel = label;
+        _autoChoice.Label = $"Automático · {label ?? OsFamily.Label(family)}";
+        ApplyFamily();
+    }
+
+    private void ApplyFamily(bool force = false)
+    {
+        var family = SelectedOsChoice.Id == Auto ? _detectedFamily ?? OsFamily.Debian : SelectedOsChoice.Id;
+        if (!force && family == _family)
+        {
+            return;
+        }
+
+        _family = family;
+        if (!_byFamily.TryGetValue(family, out var categories))
+        {
+            categories = BuildFamily(family);
+            _byFamily[family] = categories;
+        }
+
+        _builtIn = categories;
+        _byId.Clear();
+        foreach (var item in _builtIn.SelectMany(c => c.Items))
+        {
+            item.IsFavorite = _settings.FavoriteCommands.Contains(item.Id);
+            _byId[item.Id] = item;
+        }
+
+        Rebuild();
+        FamilyChanged?.Invoke();
+    }
+
+    private List<CommandCategoryViewModel> BuildFamily(string family) => _library.Categories
+        .Select(c => (Category: c, Commands: c.For(family)))
+        .Where(x => x.Commands.Count > 0)
+        .Select(x =>
         {
             var category = new CommandCategoryViewModel
             {
-                Id = c.Id,
-                Name = c.Name,
-                Icon = Enum.TryParse<SymbolRegular>(c.Icon, out var icon) ? icon : SymbolRegular.Document20,
-                Description = c.Description,
+                Id = x.Category.Id,
+                Name = x.Category.Name,
+                Icon = Enum.TryParse<SymbolRegular>(x.Category.Icon, out var icon) ? icon : SymbolRegular.Document20,
+                Description = x.Category.Description,
             };
-            foreach (var command in c.Commands)
+            foreach (var command in x.Commands)
             {
-                var item = new CommandItemViewModel(command, c.Name, isCustom: false);
-                _byId[item.Id] = item;
-                category.Items.Add(item);
+                category.Items.Add(new CommandItemViewModel(command, x.Category.Name, isCustom: false, family: family));
             }
 
             return category;
-        }).ToList();
-
-        foreach (var id in settings.FavoriteCommands)
-        {
-            if (_byId.TryGetValue(id, out var item))
-            {
-                item.IsFavorite = true;
-            }
-        }
-
-        // Tudo começa recolhido: a pessoa vê os temas e abre o que quiser.
-        Rebuild();
-    }
+        })
+        .ToList();
 
     public ObservableCollection<CommandCategoryViewModel> Sections { get; } = [];
 
@@ -296,6 +397,20 @@ public sealed partial class CommandsViewModel : ObservableObject
 
     public CustomCommand? FindCustom(string id) => _settings.CustomCommands.FirstOrDefault(c => c.Id == id);
 
+    /// <summary>As macros mudaram (janela de macros ou gravação): redesenha a seção e abre ela.</summary>
+    public void MacrosChanged(bool expand = false)
+    {
+        var ids = _settings.Macros.Select(m => m.Id).ToHashSet(StringComparer.Ordinal);
+        _settings.FavoriteCommands.RemoveAll(id => id.StartsWith("macro.", StringComparison.Ordinal) && !ids.Contains(id));
+        _settings.RecentCommands.RemoveAll(id => id.StartsWith("macro.", StringComparison.Ordinal) && !ids.Contains(id));
+        if (expand)
+        {
+            _expanded.Add("macros");
+        }
+
+        Rebuild();
+    }
+
     /// <summary>Volta ao estado inicial ao abrir o painel: busca vazia e todos os temas recolhidos.</summary>
     public void CollapseAll()
     {
@@ -345,7 +460,8 @@ public sealed partial class CommandsViewModel : ObservableObject
     {
         // Os itens são reaproveitados: formulários preenchidos e estrelas não se perdem ao buscar.
         var customItems = _settings.CustomCommands.Select(ToItem).ToList();
-        foreach (var item in customItems)
+        var macroItems = _settings.Macros.Select(ToItem).ToList();
+        foreach (var item in customItems.Concat(macroItems))
         {
             _byId[item.Id] = item;
         }
@@ -355,7 +471,7 @@ public sealed partial class CommandsViewModel : ObservableObject
         if (query.Length > 0)
         {
             var words = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            var matches = customItems.Concat(_builtIn.SelectMany(c => c.Items))
+            var matches = macroItems.Concat(customItems).Concat(_builtIn.SelectMany(c => c.Items))
                 .Where(i => words.All(w => i.SearchText.Contains(w, StringComparison.Ordinal)))
                 .ToList();
             var results = new CommandCategoryViewModel
@@ -397,6 +513,24 @@ public sealed partial class CommandsViewModel : ObservableObject
         }
 
         Sections.Add(mine);
+
+        var macros = new CommandCategoryViewModel
+        {
+            Id = "macros",
+            Name = "Minhas macros",
+            Icon = SymbolRegular.Flash20,
+            Description = macroItems.Count == 0
+                ? "Sequências de comandos executadas de uma vez, esperando cada uma terminar. Grave o que você digita ou monte a sua em Ferramentas → Macros."
+                : null,
+            IsSpecial = true,
+            IsExpanded = _expanded.Contains("macros"),
+        };
+        foreach (var item in macroItems)
+        {
+            macros.Items.Add(item);
+        }
+
+        Sections.Add(macros);
 
         foreach (var category in _builtIn)
         {
@@ -442,6 +576,35 @@ public sealed partial class CommandsViewModel : ObservableObject
         return new CommandItemViewModel(definition, "Meus comandos", isCustom: true)
         {
             IsFavorite = _settings.FavoriteCommands.Contains(custom.Id),
+        };
+    }
+
+    private CommandItemViewModel ToItem(Core.Macros.CommandMacro macro)
+    {
+        var steps = Core.Macros.MacroRunner.Runnable(macro).Count;
+        var description = string.IsNullOrWhiteSpace(macro.Description)
+            ? steps == 1 ? "1 passo" : $"{steps} passos"
+            : macro.Description;
+        var preview = macro.Preview;
+        if (_byId.TryGetValue(macro.Id, out var existing) && existing.IsMacro && existing.Definition.Cmd == preview &&
+            existing.Title == macro.Name && existing.Description == description && existing.IsCaution == macro.LooksDestructive)
+        {
+            return existing;
+        }
+
+        var definition = new CommandDefinition
+        {
+            Id = macro.Id,
+            Title = string.IsNullOrWhiteSpace(macro.Name) ? "Macro sem nome" : macro.Name,
+            Cmd = preview,
+            Description = description,
+            Risk = macro.LooksDestructive ? "caution" : "safe",
+            Tags = ["macro"],
+        };
+        return new CommandItemViewModel(definition, "Minhas macros", isCustom: false, isMacro: true)
+        {
+            IsFavorite = _settings.FavoriteCommands.Contains(macro.Id),
+            CopyText = string.Join("\n", macro.Commands),
         };
     }
 }

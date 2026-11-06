@@ -104,14 +104,18 @@ public partial class CommandsPanel : UserControl
 
         e.Handled = true;
         var menu = new ContextMenu { PlacementTarget = element };
-        menu.Items.Add(Menu(item.HasParams ? "Preencher e executar" : "Executar", () => Activate(item)));
-        menu.Items.Add(Menu("Colocar no terminal sem executar", () => Vm?.Send(item, CommandSendMode.Paste)));
-        menu.Items.Add(Menu("Copiar", () => Copy(item)));
+        menu.Items.Add(Menu(item.IsMacro ? "Executar a macro" : item.HasParams ? "Preencher e executar" : "Executar", () => Activate(item)));
+        if (item.CanPaste)
+        {
+            menu.Items.Add(Menu("Colocar no terminal sem executar", () => Vm?.Send(item, CommandSendMode.Paste)));
+        }
+
+        menu.Items.Add(Menu(item.IsMacro ? "Copiar os comandos" : "Copiar", () => Copy(item)));
         menu.Items.Add(Menu(item.IsFavorite ? "Tirar dos favoritos" : "Favoritar", () => Vm?.ToggleFavorite(item)));
-        if (item.IsCustom)
+        if (item.IsCustom || item.IsMacro)
         {
             menu.Items.Add(new Separator());
-            menu.Items.Add(Menu("Editar...", () => EditRequested?.Invoke(item)));
+            menu.Items.Add(Menu(item.IsMacro ? "Editar a macro..." : "Editar...", () => EditRequested?.Invoke(item)));
             menu.Items.Add(Menu("Excluir", () => RemoveRequested?.Invoke(item)));
         }
 
@@ -193,7 +197,7 @@ public partial class CommandsPanel : UserControl
 
     private void Copy(CommandItemViewModel item)
     {
-        var text = item.IsKeys ? item.DisplayCommand : item.Render() ?? item.DisplayCommand;
+        var text = item.CopyText ?? (item.IsKeys ? item.DisplayCommand : item.Render() ?? item.DisplayCommand);
         try
         {
             Clipboard.SetText(text);

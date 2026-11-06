@@ -156,6 +156,28 @@ public sealed class RemoteFileSystem : IFileTransport
             }
         });
 
+    /// <summary>
+    /// Nomes de usuários e grupos do servidor (/etc/passwd e /etc/group), para mostrar "root" em vez
+    /// de "0". Contas de LDAP/AD não aparecem ali e ficam pelo número. Sem acesso: listas vazias.
+    /// </summary>
+    public async Task<(IReadOnlyDictionary<int, string> Users, IReadOnlyDictionary<int, string> Groups)> GetAccountNamesAsync(CancellationToken ct)
+    {
+        async Task<IReadOnlyDictionary<int, string>> ReadAsync(string path)
+        {
+            try
+            {
+                var text = System.Text.Encoding.UTF8.GetString(await ReadAllBytesAsync(path, 4 << 20, ct).ConfigureAwait(false));
+                return AccountNames.Parse(text);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return new Dictionary<int, string>();
+            }
+        }
+
+        return (await ReadAsync("/etc/passwd").ConfigureAwait(false), await ReadAsync("/etc/group").ConfigureAwait(false));
+    }
+
     /// <summary>Escreve o conteúdo do arquivo em <paramref name="output"/> (leitura em paralelo do SSH.NET).</summary>
     public Task CopyToAsync(string remotePath, Stream output, CancellationToken ct) =>
         RunAsync(ct, async token =>

@@ -17,6 +17,73 @@
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="BorderThickness" Value="0" />
         </Style>
+
+        <!-- Larguras das colunas: as mesmas no cabeçalho e em todas as linhas (redimensionáveis, salvas) -->
+        <views:FileColumnsLayout x:Key="Columns" />
+
+        <Style x:Key="Cell" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource RdTextDim}" />
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Margin" Value="8,0,6,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+
+        <!-- Divisória entre colunas do cabeçalho: arrastar muda a largura, dois cliques ajusta ao conteúdo -->
+        <Style x:Key="ColumnGrip" TargetType="Thumb">
+            <Setter Property="Width" Value="9" />
+            <Setter Property="Margin" Value="0,0,-5,0" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Cursor" Value="SizeWE" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Panel.ZIndex" Value="1" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border Background="Transparent">
+                            <Rectangle x:Name="Line" Width="1" Margin="0,5,0,4" HorizontalAlignment="Center" Fill="{DynamicResource RdBorder}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Line" Property="Fill" Value="{DynamicResource RdAccent}" />
+                                <Setter TargetName="Line" Property="Width" Value="2" />
+                                <Setter TargetName="Line" Property="Margin" Value="0,2" />
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="Line" Property="Fill" Value="{DynamicResource RdAccent}" />
+                                <Setter TargetName="Line" Property="Width" Value="2" />
+                                <Setter TargetName="Line" Property="Margin" Value="0,2" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Cabeçalho clicável (ordena; clicar de novo inverte) -->
+        <Style x:Key="HeaderCell" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Margin" Value="6,0,4,0" />
+            <!-- Sem isto o botão usa a cor de texto do sistema (preta) em vez da do tema -->
+            <Setter Property="Foreground" Value="{DynamicResource RdTextDim}" />
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="Transparent" CornerRadius="3" Padding="2,3">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource RdHover}" />
+                                <Setter Property="Foreground" Value="{DynamicResource RdText}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -69,6 +136,9 @@
                     <ui:Button Style="{StaticResource ToolButton}" Icon="{ui:SymbolIcon ArrowUpload20}" ToolTip="Enviar arquivos para esta pasta (ou arraste do Windows)" Click="OnUpload" />
                     <ui:Button Style="{StaticResource ToolButton}" Icon="{ui:SymbolIcon ArrowDownload20}" ToolTip="Baixar selecionados para Downloads" Click="OnDownloadToDownloads" />
                     <ui:Button Style="{StaticResource ToolButton}" Icon="{ui:SymbolIcon WindowConsole20}" ToolTip="Ir para esta pasta no terminal (cd)" Click="OnCdHere" />
+                    <ui:Button x:Name="DetailsButton" Style="{StaticResource ToolButton}" Icon="{ui:SymbolIcon TextColumnThree20}" Click="OnColumnsButton"
+                               AutomationProperties.Name="Colunas"
+                               ToolTip="Colunas: escolher quais aparecem, ajustar as larguras ou alargar o painel (também no botão direito sobre o cabeçalho)" />
                 </StackPanel>
                 <ui:TextBox x:Name="FilterBox" Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged, Delay=200}" PlaceholderText="Filtrar"
                             Icon="{ui:SymbolIcon Filter20}" FontSize="12" Padding="6,4" Margin="6,0,0,0" ClearButtonEnabled="True" />
@@ -135,9 +205,73 @@
                 </StackPanel>
             </StackPanel>
 
-            <!-- Lista -->
-            <Grid>
-                <ListBox x:Name="List" FocusVisualStyle="{x:Null}"
+            <!-- Lista com cabeçalho de colunas -->
+            <Grid x:Name="ListArea">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <!-- Cabeçalho (sempre visível): clicar ordena, arrastar a divisória muda a largura, botão direito escolhe as colunas.
+                     Rola na horizontal junto com a lista. -->
+                <Border x:Name="HeaderHost" BorderBrush="{DynamicResource RdBorder}" BorderThickness="0,0,0,1" Margin="4,2,4,2" Background="Transparent"
+                        MouseRightButtonUp="OnHeaderRightClick">
+                    <ScrollViewer x:Name="HeaderScroller" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
+                                  Focusable="False" IsTabStop="False" PanningMode="None">
+                        <Grid x:Name="HeaderGrid" Margin="6,0,6,2" HorizontalAlignment="Left" Height="24"
+                              TextElement.FontSize="11.5" TextElement.Foreground="{DynamicResource RdTextDim}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="{Binding NameWidth, Source={StaticResource Columns}}" />
+                                <ColumnDefinition Width="{Binding SizeWidth, Source={StaticResource Columns}}" />
+                                <ColumnDefinition Width="{Binding ModifiedWidth, Source={StaticResource Columns}}" />
+                                <ColumnDefinition Width="{Binding OwnerWidth, Source={StaticResource Columns}}" />
+                                <ColumnDefinition Width="{Binding GroupWidth, Source={StaticResource Columns}}" />
+                                <ColumnDefinition Width="{Binding PermissionsWidth, Source={StaticResource Columns}}" />
+                            </Grid.ColumnDefinitions>
+                            <Button Style="{StaticResource HeaderCell}" Tag="Name" Click="OnSortHeader" Margin="-2,0,6,0" HorizontalContentAlignment="Left"
+                                    AutomationProperties.Name="Ordenar por nome">
+                                <TextBlock TextTrimming="CharacterEllipsis"><Run Text="Nome" /><Run Text="{Binding SortName, Mode=OneWay}" FontSize="9" /></TextBlock>
+                            </Button>
+                            <Thumb Style="{StaticResource ColumnGrip}" Tag="Name" DragStarted="OnGripStarted" DragDelta="OnGripDelta" DragCompleted="OnGripCompleted"
+                                   MouseDoubleClick="OnGripDoubleClick" />
+
+                            <Button Grid.Column="1" Style="{StaticResource HeaderCell}" Tag="Size" Click="OnSortHeader" Margin="4,0,8,0" HorizontalContentAlignment="Right"
+                                    AutomationProperties.Name="Ordenar por tamanho" Visibility="{Binding SizeVisibility, Source={StaticResource Columns}}">
+                                <TextBlock TextTrimming="CharacterEllipsis"><Run Text="{Binding SortSize, Mode=OneWay}" FontSize="9" /><Run Text="Tamanho" /></TextBlock>
+                            </Button>
+                            <Thumb Grid.Column="1" Style="{StaticResource ColumnGrip}" Tag="Size" DragStarted="OnGripStarted" DragDelta="OnGripDelta" DragCompleted="OnGripCompleted"
+                                   MouseDoubleClick="OnGripDoubleClick" Visibility="{Binding SizeVisibility, Source={StaticResource Columns}}" />
+
+                            <Button Grid.Column="2" Style="{StaticResource HeaderCell}" Tag="Modified" Click="OnSortHeader" HorizontalContentAlignment="Left"
+                                    AutomationProperties.Name="Ordenar por data de modificação" Visibility="{Binding ModifiedVisibility, Source={StaticResource Columns}}">
+                                <TextBlock TextTrimming="CharacterEllipsis"><Run Text="Modificado" /><Run Text="{Binding SortModified, Mode=OneWay}" FontSize="9" /></TextBlock>
+                            </Button>
+                            <Thumb Grid.Column="2" Style="{StaticResource ColumnGrip}" Tag="Modified" DragStarted="OnGripStarted" DragDelta="OnGripDelta" DragCompleted="OnGripCompleted"
+                                   MouseDoubleClick="OnGripDoubleClick" Visibility="{Binding ModifiedVisibility, Source={StaticResource Columns}}" />
+
+                            <Button Grid.Column="3" Style="{StaticResource HeaderCell}" Tag="Owner" Click="OnSortHeader" HorizontalContentAlignment="Left"
+                                    AutomationProperties.Name="Ordenar por dono" Visibility="{Binding OwnerVisibility, Source={StaticResource Columns}}">
+                                <TextBlock TextTrimming="CharacterEllipsis"><Run Text="Dono" /><Run Text="{Binding SortOwner, Mode=OneWay}" FontSize="9" /></TextBlock>
+                            </Button>
+                            <Thumb Grid.Column="3" Style="{StaticResource ColumnGrip}" Tag="Owner" DragStarted="OnGripStarted" DragDelta="OnGripDelta" DragCompleted="OnGripCompleted"
+                                   MouseDoubleClick="OnGripDoubleClick" Visibility="{Binding OwnerVisibility, Source={StaticResource Columns}}" />
+
+                            <Button Grid.Column="4" Style="{StaticResource HeaderCell}" Tag="Group" Click="OnSortHeader" HorizontalContentAlignment="Left"
+                                    AutomationProperties.Name="Ordenar por grupo" Visibility="{Binding GroupVisibility, Source={StaticResource Columns}}">
+                                <TextBlock TextTrimming="CharacterEllipsis"><Run Text="Grupo" /><Run Text="{Binding SortGroup, Mode=OneWay}" FontSize="9" /></TextBlock>
+                            </Button>
+                            <Thumb Grid.Column="4" Style="{StaticResource ColumnGrip}" Tag="Group" DragStarted="OnGripStarted" DragDelta="OnGripDelta" DragCompleted="OnGripCompleted"
+                                   MouseDoubleClick="OnGripDoubleClick" Visibility="{Binding GroupVisibility, Source={StaticResource Columns}}" />
+
+                            <Button Grid.Column="5" Style="{StaticResource HeaderCell}" Tag="Permissions" Click="OnSortHeader" HorizontalContentAlignment="Left"
+                                    AutomationProperties.Name="Ordenar por permissões" Visibility="{Binding PermissionsVisibility, Source={StaticResource Columns}}">
+                                <TextBlock TextTrimming="CharacterEllipsis"><Run Text="Permissões" /><Run Text="{Binding SortPermissions, Mode=OneWay}" FontSize="9" /></TextBlock>
+                            </Button>
+                            <Thumb Grid.Column="5" Style="{StaticResource ColumnGrip}" Tag="Permissions" DragStarted="OnGripStarted" DragDelta="OnGripDelta" DragCompleted="OnGripCompleted"
+                                   MouseDoubleClick="OnGripDoubleClick" Visibility="{Binding PermissionsVisibility, Source={StaticResource Columns}}" />
+                        </Grid>
+                    </ScrollViewer>
+                </Border>
+                <ListBox Grid.Row="1" x:Name="List" FocusVisualStyle="{x:Null}"
                          ItemsSource="{Binding Entries}"
                          SelectionMode="Extended"
                          Background="Transparent"
@@ -146,8 +280,9 @@
                          AllowDrop="True"
                          VirtualizingPanel.IsVirtualizing="True"
                          VirtualizingPanel.VirtualizationMode="Recycling"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
                          KeyDown="OnListKeyDown"
+                         PreviewMouseWheel="OnListWheel"
                          PreviewMouseRightButtonDown="OnListRightClick"
                          PreviewMouseLeftButtonDown="OnListMouseDown"
                          PreviewMouseMove="OnListMouseMove"
@@ -168,32 +303,46 @@
                         <DataTemplate DataType="{x:Type remote:RemoteEntryViewModel}">
                             <Grid ToolTip="{Binding ToolTip}" Opacity="{Binding Opacity}" Background="Transparent">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="{Binding NameWidth, Source={StaticResource Columns}}" />
+                                    <ColumnDefinition Width="{Binding SizeWidth, Source={StaticResource Columns}}" />
+                                    <ColumnDefinition Width="{Binding ModifiedWidth, Source={StaticResource Columns}}" />
+                                    <ColumnDefinition Width="{Binding OwnerWidth, Source={StaticResource Columns}}" />
+                                    <ColumnDefinition Width="{Binding GroupWidth, Source={StaticResource Columns}}" />
+                                    <ColumnDefinition Width="{Binding PermissionsWidth, Source={StaticResource Columns}}" />
                                 </Grid.ColumnDefinitions>
-                                <!-- Ícone do tipo (como no VS Code); o símbolo simples só aparece se os ícones não carregarem -->
-                                <Grid Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center">
-                                    <Image Source="{Binding IconImage}" Width="16" Height="16" />
-                                    <ui:SymbolIcon Symbol="{Binding Icon}" Filled="{Binding IsDirectory}" Foreground="{Binding IconBrush}" FontSize="16"
-                                                   Visibility="{Binding GlyphVisibility}" />
-                                    <Border Visibility="{Binding LinkVisibility}" Width="9" Height="9" CornerRadius="2" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                            Margin="0,0,-3,-2" Background="{DynamicResource RdSurface}" ToolTip="Link simbólico">
-                                        <ui:SymbolIcon Symbol="Link12" FontSize="8" Foreground="{DynamicResource RdAccent}" />
-                                    </Border>
-                                </Grid>
-                                <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" FontSize="13" />
-                                <TextBlock Grid.Column="2" Text="{Binding SizeText}" Foreground="{DynamicResource RdTextDim}" FontSize="11" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                <DockPanel ClipToBounds="True">
+                                    <!-- Ícone do tipo (como no VS Code); o símbolo simples só aparece se os ícones não carregarem -->
+                                    <Grid DockPanel.Dock="Left" Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center">
+                                        <Image Source="{Binding IconImage}" Width="16" Height="16" />
+                                        <ui:SymbolIcon Symbol="{Binding Icon}" Filled="{Binding IsDirectory}" Foreground="{Binding IconBrush}" FontSize="16"
+                                                       Visibility="{Binding GlyphVisibility}" />
+                                        <Border Visibility="{Binding LinkVisibility}" Width="9" Height="9" CornerRadius="2" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                Margin="0,0,-3,-2" Background="{DynamicResource RdSurface}" ToolTip="Link simbólico">
+                                            <ui:SymbolIcon Symbol="Link12" FontSize="8" Foreground="{DynamicResource RdAccent}" />
+                                        </Border>
+                                    </Grid>
+                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" FontSize="13" Margin="0,0,8,0" />
+                                </DockPanel>
+                                <TextBlock Grid.Column="1" Style="{StaticResource Cell}" Text="{Binding SizeText}" TextAlignment="Right" Margin="6,0,10,0"
+                                           Visibility="{Binding SizeVisibility, Source={StaticResource Columns}}" />
+                                <TextBlock Grid.Column="2" Style="{StaticResource Cell}" Text="{Binding ModifiedText}"
+                                           Visibility="{Binding ModifiedVisibility, Source={StaticResource Columns}}" />
+                                <TextBlock Grid.Column="3" Style="{StaticResource Cell}" Text="{Binding Owner}"
+                                           Visibility="{Binding OwnerVisibility, Source={StaticResource Columns}}" />
+                                <TextBlock Grid.Column="4" Style="{StaticResource Cell}" Text="{Binding Group}"
+                                           Visibility="{Binding GroupVisibility, Source={StaticResource Columns}}" />
+                                <TextBlock Grid.Column="5" Style="{StaticResource Cell}" Text="{Binding Permissions}" FontFamily="Cascadia Mono, Consolas" FontSize="11"
+                                           Visibility="{Binding PermissionsVisibility, Source={StaticResource Columns}}" />
                             </Grid>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
 
-                <ui:ProgressRing IsIndeterminate="True" Width="22" Height="22" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,10,0"
+                <ui:ProgressRing Grid.Row="1" IsIndeterminate="True" Width="22" Height="22" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,10,0"
                                  Visibility="{Binding IsBusy, Converter={StaticResource BoolVis}}" />
 
                 <!-- Conectando / erro / desconectado -->
-                <Border Background="{DynamicResource RdSurface}" Visibility="{Binding State, Converter={StaticResource StateIs}, ConverterParameter=Connecting|Error|Idle}">
+                <Border Grid.RowSpan="2" Background="{DynamicResource RdSurface}" Visibility="{Binding State, Converter={StaticResource StateIs}, ConverterParameter=Connecting|Error|Idle}">
                     <StackPanel VerticalAlignment="Center" Margin="20">
                         <ui:ProgressRing IsIndeterminate="True" Width="28" Height="28" HorizontalAlignment="Center"
                                          Visibility="{Binding State, Converter={StaticResource StateIs}, ConverterParameter=Connecting}" />

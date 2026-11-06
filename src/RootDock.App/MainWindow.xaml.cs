@@ -99,6 +99,15 @@ public partial class MainWindow : FluentWindow
         _ftp = new FtpService(this, _vault, _sessions, _transfers, _transferHistory, Notify);
         _workspace.Vnc = _vnc;
         FilesView.Transfers = _transfers;
+        _settings.FilesColumns ??= new();
+        FilesView.Columns.Attach(_settings.FilesColumns, SaveSettings);
+        if (Enum.TryParse<FileSortColumn>(_settings.FilesColumns.SortColumn, out var sortColumn))
+        {
+            RemoteFilesViewModel.DefaultSort = (sortColumn, _settings.FilesColumns.SortDescending);
+        }
+
+        FilesView.WidenRequested += ToggleFilesWidth;
+        FilesView.IsWidened = () => _sidebarBeforeDetails is not null;
         _transfers.Completed += item =>
         {
             if (item.State == TransferState.Done)
@@ -1064,6 +1073,40 @@ public partial class MainWindow : FluentWindow
         ProdBadge.Visibility = session.Entry.Environment == SessionEnvironment.Production ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    private double? _sidebarBeforeDetails;
+
+    /// <summary>
+    /// Menu de colunas do painel de arquivos: alarga a barra lateral até caberem todas as colunas
+    /// (sem espremer o terminal); de novo, volta à largura de antes.
+    /// </summary>
+    private void ToggleFilesWidth(double wanted)
+    {
+        if (_sidebarBeforeDetails is { } before)
+        {
+            SidebarColumn.Width = new GridLength(before);
+            _sidebarBeforeDetails = null;
+            return;
+        }
+
+        var current = SidebarColumn.ActualWidth;
+        var room = ActualWidth - 420 - (IsCommandsPanelOpen ? CommandsColumn.ActualWidth : 0); // terminal fica com pelo menos ~420 px
+        var target = Math.Min(Math.Min(wanted, room), SidebarColumn.MaxWidth);
+        if (target <= current + 1)
+        {
+            Notify(wanted <= current + 1
+                ? "Todas as colunas já cabem no painel."
+                : "Sem espaço para alargar: maximize a janela ou feche o painel de comandos.", false);
+            return;
+        }
+
+        _sidebarBeforeDetails = current;
+        SidebarColumn.Width = new GridLength(target);
+        if (target < wanted)
+        {
+            Notify("Janela estreita: o painel alargou o que coube; role para o lado (Shift + roda do mouse) para ver o resto.", false);
+        }
+    }
+
     private void OnSideTabChanged(object sender, RoutedEventArgs e)
     {
         if (FilesView is null || SessionsView is null)
@@ -1094,7 +1137,7 @@ public partial class MainWindow : FluentWindow
 
     private void RestorePlacement()
     {
-        SidebarColumn.Width = new GridLength(Math.Clamp(_settings.SidebarWidth, 180, 600));
+        SidebarColumn.Width = new GridLength(Math.Clamp(_settings.SidebarWidth, 180, SidebarColumn.MaxWidth));
 
         // Primeira abertura: nunca maior que a área útil (telas pequenas ou com escala de 125%/150%).
         var work = SystemParameters.WorkArea;

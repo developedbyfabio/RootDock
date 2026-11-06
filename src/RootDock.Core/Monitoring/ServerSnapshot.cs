@@ -11,6 +11,9 @@ public sealed record ServerSnapshot
 
     public string? OsName { get; init; }
 
+    /// <summary>ID e ID_LIKE do /etc/os-release (ex.: "rocky rhel centos fedora"): família dos comandos.</summary>
+    public string? OsId { get; init; }
+
     public string? Kernel { get; init; }
 
     public int Cores { get; init; }

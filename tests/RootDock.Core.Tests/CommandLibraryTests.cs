@@ -13,6 +13,60 @@ public class CommandLibraryTests
     /// </summary>
     private static readonly IReadOnlyList<string> Forbidden = CommandSafety.Patterns;
 
+    [Theory]
+    [InlineData("ubuntu debian", OsFamily.Debian)]
+    [InlineData("debian", OsFamily.Debian)]
+    [InlineData("rocky rhel centos fedora", OsFamily.Rhel)]
+    [InlineData("\"rhel\" \"fedora\"", OsFamily.Rhel)]
+    [InlineData("ol fedora", OsFamily.Rhel)]
+    [InlineData("almalinux rhel centos fedora", OsFamily.Rhel)]
+    [InlineData("sles", OsFamily.Suse)]
+    [InlineData("sles_sap", OsFamily.Suse)]
+    [InlineData("opensuse-leap suse opensuse", OsFamily.Suse)]
+    [InlineData("alpine", null)]
+    [InlineData("", null)]
+    public void Os_release_ids_map_to_a_family(string ids, string? family) =>
+        Assert.Equal(family, OsFamily.FromOsRelease(ids));
+
+    [Fact]
+    public void Each_family_gets_its_own_package_manager_firewall_and_logs()
+    {
+        string Cmd(string family, string id) =>
+            Library.Categories.SelectMany(c => c.For(family)).Single(c => c.Id == id).Cmd;
+
+        Assert.Equal("sudo apt install {{pacote}}", Cmd(OsFamily.Debian, "pacotes.install"));
+        Assert.Equal("sudo dnf install {{pacote}}", Cmd(OsFamily.Rhel, "pacotes.install"));
+        Assert.Equal("sudo zypper install {{pacote}}", Cmd(OsFamily.Suse, "pacotes.install"));
+        Assert.Contains("ufw", Cmd(OsFamily.Debian, "seguranca.ufw"));
+        Assert.Contains("firewall-cmd", Cmd(OsFamily.Rhel, "seguranca.ufw"));
+        Assert.Contains("/var/log/secure", Cmd(OsFamily.Rhel, "seguranca.failed"));
+        Assert.Contains("/var/log/httpd/", Cmd(OsFamily.Rhel, "web.apache-errors"));
+
+        // Comandos só de uma família e categorias só do Windows.
+        Assert.Contains(Library.Categories.SelectMany(c => c.For(OsFamily.Rhel)), c => c.Id == "seguranca.selinux");
+        Assert.DoesNotContain(Library.Categories.SelectMany(c => c.For(OsFamily.Debian)), c => c.Id == "seguranca.selinux");
+        Assert.DoesNotContain(Library.Categories.SelectMany(c => c.For(OsFamily.Debian)), c => c.Id.StartsWith("win-", StringComparison.Ordinal));
+        var windows = Library.Categories.Where(c => c.For(OsFamily.Windows).Count > 0).Select(c => c.Id).ToList();
+        Assert.All(windows, id => Assert.StartsWith("win-", id));
+        Assert.Contains(Library.Categories.SelectMany(c => c.For(OsFamily.Windows)), c => c.Run && c.Cmd == "ncpa.cpl");
+    }
+
+    [Fact]
+    public void Windows_values_use_powershell_or_cmd_quoting()
+    {
+        var port = Library.Categories.SelectMany(c => c.For(OsFamily.Windows)).Single(c => c.Id == "win-rede.port");
+        var detail = Library.Categories.SelectMany(c => c.For(OsFamily.Windows)).Single(c => c.Id == "win-usuarios.detail");
+
+        Assert.Equal("Test-NetConnection srv01 -Port 443",
+            CommandTemplate.Render(port, new Dictionary<string, string> { ["host"] = "srv01", ["porta"] = "443" }, windows: true));
+        Assert.Equal("Test-NetConnection 'meu servidor' -Port 443",
+            CommandTemplate.Render(port, new Dictionary<string, string> { ["host"] = "meu servidor", ["porta"] = "443" }, windows: true));
+        Assert.Equal("net user \"joao silva\"",
+            CommandTemplate.Render(detail, new Dictionary<string, string> { ["usuario"] = "joao silva" }, windows: true));
+        Assert.Throws<CommandRenderException>(() =>
+            CommandTemplate.Render(detail, new Dictionary<string, string> { ["usuario"] = "%USERNAME%" }, windows: true));
+    }
+
     [Fact]
     public void Built_in_library_loads_with_categories_and_commands()
     {
@@ -37,7 +91,7 @@ public class CommandLibraryTests
     [Fact]
     public void Every_field_in_a_template_has_a_parameter_and_vice_versa()
     {
-        Assert.All(Library.AllCommands.Where(c => !c.Keys), c =>
+        Assert.All(Library.AllResolved().Select(r => r.Command).Where(c => !c.Keys), c =>
         {
             var fields = CommandTemplate.FieldNames(c.Cmd).OrderBy(x => x).ToList();
             var parameters = c.Params.Select(p => p.Name).OrderBy(x => x).ToList();
@@ -48,7 +102,7 @@ public class CommandLibraryTests
     [Fact]
     public void Library_has_no_destructive_commands()
     {
-        foreach (var command in Library.AllCommands)
+        foreach (var (family, command) in Library.AllResolved())
         {
             foreach (var pattern in Forbidden)
             {
@@ -83,9 +137,11 @@ public class CommandLibraryTests
     public void Commands_that_change_things_are_marked_as_caution()
     {
         var mustConfirm = new[] { "restart", "stop", "kill", "install", "upgrade", "chmod", "chown", "pull", "up -d", "sudo -i", "optimize:clear" };
-        foreach (var command in Library.AllCommands.Where(c => !c.Keys))
+        foreach (var command in Library.AllResolved().Select(r => r.Command).Where(c => !c.Keys))
         {
-            if (mustConfirm.Any(word => command.Cmd.Contains(word, StringComparison.Ordinal)) && !command.Cmd.StartsWith("systemctl status", StringComparison.Ordinal))
+            // Só consultas: "systemctl status" e "needs-restarting" (RHEL: diz se precisa reiniciar).
+            var readOnly = command.Cmd.StartsWith("systemctl status", StringComparison.Ordinal) || command.Cmd.Contains("needs-restarting", StringComparison.Ordinal);
+            if (mustConfirm.Any(word => command.Cmd.Contains(word, StringComparison.Ordinal)) && !readOnly)
             {
                 Assert.True(command.IsCaution, $"{command.Id} altera o servidor e deveria pedir confirmação: {command.Cmd}");
             }

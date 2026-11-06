@@ -23,9 +23,11 @@
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
 
-        <!-- Cartão de um comando -->
+        <!-- Cartão de um comando (com uma linha separando do anterior: dá para ver onde cada um começa) -->
         <DataTemplate x:Key="CommandCard" DataType="{x:Type vm:CommandItemViewModel}">
-            <Border x:Name="Card" CornerRadius="6" Padding="10,7,6,8" Margin="0,2" Background="Transparent" Cursor="Hand"
+            <StackPanel>
+            <Border x:Name="Separator" Height="1" Margin="10,3,8,3" Background="{DynamicResource RdBorder}" SnapsToDevicePixels="True" />
+            <Border x:Name="Card" CornerRadius="6" Padding="10,7,6,8" Background="Transparent" Cursor="Hand"
                     BorderThickness="1" BorderBrush="Transparent"
                     MouseLeftButtonUp="OnCommandClick" PreviewMouseRightButtonUp="OnCommandRightClick">
                 <Grid>
@@ -46,7 +48,8 @@
                                 </ui:Button.Icon>
                             </ui:Button>
                             <ui:Button Style="{StaticResource ActionButton}" Icon="{ui:SymbolIcon Copy20}" Click="OnCopy" ToolTip="Copiar o comando" />
-                            <ui:Button Style="{StaticResource ActionButton}" Icon="{ui:SymbolIcon ClipboardPaste20}" Click="OnPaste" ToolTip="Colocar no terminal sem executar (para revisar)" />
+                            <ui:Button Style="{StaticResource ActionButton}" Icon="{ui:SymbolIcon ClipboardPaste20}" Click="OnPaste" ToolTip="Colocar no terminal sem executar (para revisar)"
+                                       Visibility="{Binding CanPaste, Converter={StaticResource BoolVis}}" />
                             <ui:Button Style="{StaticResource ActionButton}" Click="OnRun" ToolTip="Executar no terminal">
                                 <ui:Button.Icon>
                                     <ui:SymbolIcon Symbol="Play20" Filled="True" Foreground="{DynamicResource RdDev}" />
@@ -66,6 +69,18 @@
                             <Border Style="{StaticResource Badge}" Background="{DynamicResource RdAccentSoft}" Visibility="{Binding IsKeys, Converter={StaticResource BoolVis}}"
                                     ToolTip="Envia as teclas do atalho para o terminal">
                                 <TextBlock Text="atalho" FontSize="10.5" Foreground="{DynamicResource RdAccent}" />
+                            </Border>
+                            <Border Style="{StaticResource Badge}" Background="{DynamicResource RdAccentSoft}" Visibility="{Binding IsRun, Converter={StaticResource BoolVis}}"
+                                    ToolTip="Abre neste computador, como Win+R (numa Área de Trabalho Remota, copia para colar lá)">
+                                <TextBlock Text="Win+R" FontSize="10.5" Foreground="{DynamicResource RdAccent}" />
+                            </Border>
+                            <Border Style="{StaticResource Badge}" Background="{DynamicResource RdChip}" Visibility="{Binding IsPowerShell, Converter={StaticResource BoolVis}}"
+                                    ToolTip="Comando do PowerShell (num CMD, o RootDock o executa dentro de powershell -Command)">
+                                <TextBlock Text="PowerShell" FontSize="10.5" Foreground="{DynamicResource RdTextDim}" />
+                            </Border>
+                            <Border Style="{StaticResource Badge}" Background="{DynamicResource RdAccentSoft}" Visibility="{Binding IsMacro, Converter={StaticResource BoolVis}}"
+                                    ToolTip="Executa os passos em sequência, esperando cada comando terminar">
+                                <TextBlock Text="macro" FontSize="10.5" Foreground="{DynamicResource RdAccent}" />
                             </Border>
                         </WrapPanel>
                     </DockPanel>
@@ -110,7 +125,12 @@
                     </Border>
                 </Grid>
             </Border>
+            </StackPanel>
             <DataTemplate.Triggers>
+                <!-- Primeiro da lista: sem linha em cima -->
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
+                    <Setter TargetName="Separator" Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
                 <Trigger SourceName="Card" Property="IsMouseOver" Value="True">
                     <Setter TargetName="Card" Property="Background" Value="{DynamicResource RdHover}" />
                     <Setter TargetName="Actions" Property="Opacity" Value="1" />
@@ -173,6 +193,13 @@
                 </StackPanel>
                 <TextBlock Text="{Binding TargetWarning}" FontSize="11.5" Foreground="{DynamicResource RdStaging}" TextWrapping="Wrap" Margin="15,3,0,0"
                            Visibility="{Binding TargetWarning, Converter={StaticResource NotEmpty}}" />
+                <!-- Sistema dos comandos: automático (pelo terminal em foco) ou escolhido -->
+                <DockPanel Margin="15,7,0,0">
+                    <TextBlock DockPanel.Dock="Left" Text="Sistema" FontSize="12" Foreground="{DynamicResource RdTextDim}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <ComboBox x:Name="OsBox" ItemsSource="{Binding OsChoices}" SelectedItem="{Binding SelectedOsChoice}" DisplayMemberPath="Label"
+                              FontSize="12" MinHeight="0" Padding="9,4" AutomationProperties.Name="Sistema dos comandos"
+                              ToolTip="Automático: segue o terminal em foco (Ubuntu, RHEL/CentOS, SUSE/SLES, Windows). Escolha um sistema para fixar." />
+                </DockPanel>
             </StackPanel>
         </Border>
 

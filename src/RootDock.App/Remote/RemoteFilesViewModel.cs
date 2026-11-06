@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.IO;
 using System.Net.Sockets;
 using System.Windows.Media;
@@ -28,9 +29,12 @@ public sealed class RemoteEntryViewModel
     private static readonly HashSet<string> CodeExt = [".php", ".js", ".ts", ".py", ".sh", ".cs", ".java", ".go", ".rb", ".css", ".html", ".vue", ".sql"];
     private static readonly HashSet<string> ConfigExt = [".conf", ".cfg", ".ini", ".yml", ".yaml", ".json", ".xml", ".env", ".toml", ".service"];
 
-    public RemoteEntryViewModel(RemoteEntry entry)
+    public RemoteEntryViewModel(RemoteEntry entry, string? owner = null, string? group = null)
     {
         Entry = entry;
+        Owner = owner ?? entry.UserId.ToString(CultureInfo.InvariantCulture);
+        Group = group ?? entry.GroupId.ToString(CultureInfo.InvariantCulture);
+        ModifiedText = entry.Modified.ToString("dd/MM/yyyy HH:mm", CultureInfo.GetCultureInfo("pt-BR"));
         var ext = Path.GetExtension(entry.Name).ToLowerInvariant();
         (Icon, IconBrush) = entry switch
         {
@@ -70,9 +74,29 @@ public sealed class RemoteEntryViewModel
 
     public string SizeText { get; }
 
+    /// <summary>Colunas do modo detalhado (painel largo).</summary>
+    public string ModifiedText { get; }
+
+    public string Owner { get; }
+
+    public string Group { get; }
+
+    public string Permissions => Entry.Permissions;
+
     public string ToolTip { get; }
 
     public double Opacity => Entry.IsHidden ? 0.65 : 1;
+}
+
+/// <summary>Coluna pela qual a lista de arquivos está ordenada (pastas sempre primeiro).</summary>
+public enum FileSortColumn
+{
+    Name,
+    Size,
+    Modified,
+    Owner,
+    Group,
+    Permissions,
 }
 
 /// <summary>
@@ -121,6 +145,54 @@ public sealed partial class RemoteFilesViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _summary = "";
 
     public bool IsProduction => Session.Environment == SessionEnvironment.Production;
+
+    // Ordenação: a última escolhida vale para as próximas abas (e fica salva nas preferências).
+    private static (FileSortColumn Column, bool Descending) _lastSort = (FileSortColumn.Name, false);
+
+    /// <summary>Ordem usada pelas próximas listas (lida das preferências ao abrir o RootDock).</summary>
+    public static (FileSortColumn Column, bool Descending) DefaultSort
+    {
+        get => _lastSort;
+        set => _lastSort = value;
+    }
+    private IReadOnlyDictionary<int, string> _users = new Dictionary<int, string>();
+    private IReadOnlyDictionary<int, string> _groups = new Dictionary<int, string>();
+
+    public FileSortColumn SortColumn { get; private set; } = _lastSort.Column;
+
+    public bool SortDescending { get; private set; } = _lastSort.Descending;
+
+    /// <summary>Seta do cabeçalho de cada coluna ("▲", "▼" ou nada).</summary>
+    public string SortName => Arrow(FileSortColumn.Name);
+
+    public string SortSize => Arrow(FileSortColumn.Size);
+
+    public string SortModified => Arrow(FileSortColumn.Modified);
+
+    public string SortOwner => Arrow(FileSortColumn.Owner);
+
+    public string SortGroup => Arrow(FileSortColumn.Group);
+
+    public string SortPermissions => Arrow(FileSortColumn.Permissions);
+
+    /// <summary>
+    /// Clique no cabeçalho: a mesma coluna inverte; outra coluna começa em ordem crescente (tamanho e
+    /// data começam do maior/mais recente, que é o que se procura).
+    /// </summary>
+    public void SortBy(FileSortColumn column)
+    {
+        SortDescending = column == SortColumn ? !SortDescending : column is FileSortColumn.Size or FileSortColumn.Modified;
+        SortColumn = column;
+        _lastSort = (SortColumn, SortDescending);
+        foreach (var name in new[] { nameof(SortColumn), nameof(SortDescending), nameof(SortName), nameof(SortSize), nameof(SortModified), nameof(SortOwner), nameof(SortGroup), nameof(SortPermissions) })
+        {
+            OnPropertyChanged(name);
+        }
+
+        ApplyFilter();
+    }
+
+    private string Arrow(FileSortColumn column) => column != SortColumn ? "" : SortDescending ? "▼" : "▲";
 
     /// <summary>Mensagens curtas para a barra de status (texto, é erro?).</summary>
     public event Action<string, bool>? Notice;
@@ -510,6 +582,7 @@ public sealed partial class RemoteFilesViewModel : ObservableObject, IDisposable
             _fs = fs;
             State = FilesState.Ready;
             Message = "";
+            _ = LoadAccountNamesAsync(fs);
             var start = !string.IsNullOrEmpty(CurrentPath) ? CurrentPath : _terminalDirectory ?? _fs.HomeDirectory;
             await NavigateAsync(start);
             if (_all.Count == 0 && CurrentPath != start)
@@ -557,18 +630,33 @@ public sealed partial class RemoteFilesViewModel : ObservableObject, IDisposable
     private void ApplyFilter()
     {
         var text = Filter?.Trim() ?? "";
-        var visible = _all
+        var filtered = _all
             .Where(e => ShowHidden || !e.IsHidden)
             .Where(e => text.Length == 0 || e.Name.Contains(text, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(e => e.IsDirectory)
-            .ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+            .OrderByDescending(e => e.IsDirectory); // pastas sempre primeiro
+        var names = StringComparer.OrdinalIgnoreCase;
+        var sorted = (SortColumn, SortDescending) switch
+        {
+            (FileSortColumn.Size, false) => filtered.ThenBy(e => e.Size),
+            (FileSortColumn.Size, true) => filtered.ThenByDescending(e => e.Size),
+            (FileSortColumn.Modified, false) => filtered.ThenBy(e => e.Modified),
+            (FileSortColumn.Modified, true) => filtered.ThenByDescending(e => e.Modified),
+            (FileSortColumn.Owner, false) => filtered.ThenBy(e => OwnerOf(e), names),
+            (FileSortColumn.Owner, true) => filtered.ThenByDescending(e => OwnerOf(e), names),
+            (FileSortColumn.Group, false) => filtered.ThenBy(e => GroupOf(e), names),
+            (FileSortColumn.Group, true) => filtered.ThenByDescending(e => GroupOf(e), names),
+            (FileSortColumn.Permissions, false) => filtered.ThenBy(e => e.Permissions, StringComparer.Ordinal),
+            (FileSortColumn.Permissions, true) => filtered.ThenByDescending(e => e.Permissions, StringComparer.Ordinal),
+            (_, true) => filtered.ThenByDescending(e => e.Name, names),
+            _ => filtered.ThenBy(e => e.Name, names),
+        };
+        var visible = (SortColumn == FileSortColumn.Name ? sorted : sorted.ThenBy(e => e.Name, names)).ToList();
 
         Entries.ReplaceAll(visible.Select(entry =>
         {
             if (!_rows.TryGetValue(entry, out var row))
             {
-                row = new RemoteEntryViewModel(entry);
+                row = new RemoteEntryViewModel(entry, _users.GetValueOrDefault(entry.UserId), _groups.GetValueOrDefault(entry.GroupId));
                 _rows[entry] = row;
             }
 
@@ -579,6 +667,32 @@ public sealed partial class RemoteFilesViewModel : ObservableObject, IDisposable
         var files = visible.Count - dirs;
         var bytes = visible.Where(e => !e.IsDirectory).Sum(e => e.Size);
         Summary = $"{dirs} pastas · {files} arquivos · {Format.Bytes(bytes)}" + (visible.Count < _all.Count ? $"  (de {_all.Count})" : "");
+    }
+
+    private string OwnerOf(RemoteEntry e) => _users.GetValueOrDefault(e.UserId) ?? e.UserId.ToString(CultureInfo.InvariantCulture);
+
+    private string GroupOf(RemoteEntry e) => _groups.GetValueOrDefault(e.GroupId) ?? e.GroupId.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>Nomes de dono e grupo (uma vez por conexão, em segundo plano); a lista é redesenhada com eles.</summary>
+    private async Task LoadAccountNamesAsync(RemoteFileSystem fs)
+    {
+        try
+        {
+            var (users, groups) = await fs.GetAccountNamesAsync(CancellationToken.None);
+            if (_disposed || !ReferenceEquals(fs, _fs) || (users.Count == 0 && groups.Count == 0))
+            {
+                return;
+            }
+
+            _users = users;
+            _groups = groups;
+            _rows.Clear();
+            ApplyFilter();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Log.Info($"Nomes de usuários do servidor: {ex.Message}");
+        }
     }
 
     private void RefreshWhenTransfersFinish(string directory)
