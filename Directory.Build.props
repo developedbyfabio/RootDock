@@ -8,7 +8,7 @@
     <SatelliteResourceLanguages>pt-BR;en</SatelliteResourceLanguages>
     <Product>RootDock</Product>
     <!-- Versão local. As versões publicadas recebem a da tag (vX.Y.Z) no workflow de release. -->
-    <Version>0.1.10</Version>
+    <Version>0.1.11</Version>
     <Authors>Fabio Henrique de Almeida Lemes</Authors>
     <Company>Fabio Henrique de Almeida Lemes</Company>
     <Copyright>© 2026 Fabio Henrique de Almeida Lemes</Copyright>

@@ -127,8 +127,9 @@
             </Border>
             </StackPanel>
             <DataTemplate.Triggers>
-                <!-- Primeiro da lista: sem linha em cima -->
-                <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
+                <!-- Primeiro da lista: sem linha em cima. AlternationIndex (= posição, com AlternationCount alto na
+                     lista) vale também na lista virtualizada da busca, onde PreviousData não é confiável. -->
+                <DataTrigger Binding="{Binding (ItemsControl.AlternationIndex), RelativeSource={RelativeSource TemplatedParent}}" Value="0">
                     <Setter TargetName="Separator" Property="Visibility" Value="Collapsed" />
                 </DataTrigger>
                 <Trigger SourceName="Card" Property="IsMouseOver" Value="True">
@@ -167,9 +168,10 @@
         </Grid>
 
         <!-- Busca -->
+        <!-- Delay: busca quando a pessoa para de digitar (não refaz a lista a cada letra de uma palavra) -->
         <ui:TextBox DockPanel.Dock="Top" x:Name="SearchBox" Margin="10,0,10,8" Icon="{ui:SymbolIcon Search20}" ClearButtonEnabled="True"
                     PlaceholderText="Buscar: espaço, memória, logs, porta..."
-                    Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" KeyDown="OnSearchKey" />
+                    Text="{Binding Search, UpdateSourceTrigger=PropertyChanged, Delay=120}" KeyDown="OnSearchKey" />
 
         <!-- Para onde vai o comando -->
         <Border DockPanel.Dock="Top" Margin="10,0,10,8" Padding="10,7" CornerRadius="6" Background="{DynamicResource RdHover}">
@@ -206,8 +208,38 @@
         <TextBlock DockPanel.Dock="Top" Text="{Binding ResultSummary}" FontSize="11.5" Foreground="{DynamicResource RdTextDim}" Margin="16,0,12,4"
                    TextWrapping="Wrap" Visibility="{Binding ResultSummary, Converter={StaticResource NotEmpty}}" />
 
+        <Grid>
+        <!-- Resultados da busca: lista virtualizada, só os cartões visíveis existem (digitar não trava) -->
+        <ItemsControl x:Name="ResultsList" ItemsSource="{Binding Results}" ItemTemplate="{StaticResource CommandCard}" AlternationCount="1000000"
+                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Standard" VirtualizingPanel.ScrollUnit="Pixel"
+                      ScrollViewer.CanContentScroll="True" Focusable="False"
+                      Visibility="{Binding IsSearching, Converter={StaticResource BoolVis}}">
+            <ItemsControl.Template>
+                <ControlTemplate TargetType="ItemsControl">
+                    <ScrollViewer x:Name="ResultsScroller" CanContentScroll="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Focusable="False">
+                        <ItemsPresenter />
+                    </ScrollViewer>
+                </ControlTemplate>
+            </ItemsControl.Template>
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel Margin="6,2,6,14" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+        </ItemsControl>
+
         <!-- Temas e comandos -->
         <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <ScrollViewer.Style>
+                <Style TargetType="ScrollViewer" BasedOn="{StaticResource {x:Type ScrollViewer}}">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsSearching}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </ScrollViewer.Style>
             <ItemsControl ItemsSource="{Binding Sections}" Margin="6,0,6,14">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:CommandCategoryViewModel}">
@@ -242,7 +274,7 @@
                                 <StackPanel>
                                     <TextBlock Text="{Binding Description}" FontSize="11.5" Foreground="{DynamicResource RdTextDim}" TextWrapping="Wrap"
                                                Margin="4,4,6,4" Visibility="{Binding HasDescription, Converter={StaticResource BoolVis}}" />
-                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource CommandCard}" />
+                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource CommandCard}" AlternationCount="1000000" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -266,5 +298,6 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </ScrollViewer>
+        </Grid>
     </DockPanel>
 </UserControl>

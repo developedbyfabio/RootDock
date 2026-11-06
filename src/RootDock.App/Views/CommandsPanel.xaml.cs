@@ -14,6 +14,27 @@ public partial class CommandsPanel : UserControl
     public CommandsPanel()
     {
         InitializeComponent();
+        DataContextChanged += (_, e) =>
+        {
+            if (e.OldValue is CommandsViewModel old)
+            {
+                old.PropertyChanged -= OnVmChanged;
+            }
+
+            if (e.NewValue is CommandsViewModel vm)
+            {
+                vm.PropertyChanged += OnVmChanged;
+            }
+        };
+    }
+
+    // Resultados novos: a lista volta ao topo (o primeiro resultado é o que o Enter usa).
+    private void OnVmChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(CommandsViewModel.Results) && ResultsList.Template?.FindName("ResultsScroller", ResultsList) is ScrollViewer scroller)
+        {
+            scroller.ScrollToTop();
+        }
     }
 
     public event Action? CloseRequested;
@@ -53,8 +74,17 @@ public partial class CommandsPanel : UserControl
         {
             e.Handled = true;
             vm.Search = "";
+            return;
         }
-        else if (e.Key == Key.Enter && vm.Search.Length > 0 && vm.Sections.FirstOrDefault()?.Items.FirstOrDefault() is { } first)
+
+        if (e.Key != Key.Enter)
+        {
+            return;
+        }
+
+        // A busca espera a pessoa parar de digitar (Delay): com Enter logo depois da última letra, busca já.
+        SearchBox.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
+        if (vm.IsSearching && vm.Results.FirstOrDefault() is { } first)
         {
             // Enter na busca usa o primeiro resultado.
             e.Handled = true;

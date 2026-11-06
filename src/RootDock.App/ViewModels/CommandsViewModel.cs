@@ -312,6 +312,16 @@ public sealed partial class CommandsViewModel : ObservableObject
     public ObservableCollection<CommandCategoryViewModel> Sections { get; } = [];
 
     [ObservableProperty] private string _search = "";
+
+    /// <summary>Há texto na busca: a tela mostra <see cref="Results"/> no lugar dos temas.</summary>
+    [ObservableProperty] private bool _isSearching;
+
+    /// <summary>
+    /// Resultados da busca, trocados de uma vez (não item a item). A tela usa uma lista virtualizada, que só cria
+    /// os cartões visíveis: com uma letra só quase tudo casa, e desenhar centenas de cartões travava a digitação.
+    /// </summary>
+    [ObservableProperty] private IReadOnlyList<CommandItemViewModel> _results = [];
+
     [ObservableProperty] private string _targetText = "Nenhum terminal ativo";
     [ObservableProperty] private bool _canRun;
     [ObservableProperty] private string _targetWarning = "";
@@ -466,33 +476,28 @@ public sealed partial class CommandsViewModel : ObservableObject
             _byId[item.Id] = item;
         }
 
-        Sections.Clear();
         var query = CommandItemViewModel.Normalize(Search.Trim());
         if (query.Length > 0)
         {
+            // Os temas ficam como estão (escondidos) enquanto se busca: nada de desmontar e remontar a cada letra.
             var words = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var matches = macroItems.Concat(customItems).Concat(_builtIn.SelectMany(c => c.Items))
                 .Where(i => words.All(w => i.SearchText.Contains(w, StringComparison.Ordinal)))
                 .ToList();
-            var results = new CommandCategoryViewModel
+            if (!IsSearching || !matches.SequenceEqual(Results))
             {
-                Id = "busca",
-                Name = "Resultados",
-                Icon = SymbolRegular.Search20,
-                IsSpecial = true,
-                IsExpanded = true,
-            };
-            foreach (var match in matches)
-            {
-                results.Items.Add(match);
+                Results = matches; // mesma lista (ex.: favoritou um resultado): não volta a rolagem ao topo
             }
 
             ResultSummary = matches.Count == 0 ? "Nenhum comando encontrado. Tente outra palavra (ex.: disco, log, porta)." : $"{matches.Count} comandos";
-            Sections.Add(results);
+            IsSearching = true;
             return;
         }
 
+        IsSearching = false;
+        Results = [];
         ResultSummary = "";
+        Sections.Clear();
         AddSpecial("favoritos", "Favoritos", SymbolRegular.Star20, _settings.FavoriteCommands);
         AddSpecial("recentes", "Usados recentemente", SymbolRegular.History20, _settings.RecentCommands);
 
