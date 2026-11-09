@@ -139,13 +139,80 @@ public class CommandLibraryTests
         var mustConfirm = new[] { "restart", "stop", "kill", "install", "upgrade", "chmod", "chown", "pull", "up -d", "sudo -i", "optimize:clear" };
         foreach (var command in Library.AllResolved().Select(r => r.Command).Where(c => !c.Keys))
         {
-            // Só consultas: "systemctl status" e "needs-restarting" (RHEL: diz se precisa reiniciar).
-            var readOnly = command.Cmd.StartsWith("systemctl status", StringComparison.Ordinal) || command.Cmd.Contains("needs-restarting", StringComparison.Ordinal);
+            // Só consultas: "systemctl status", "needs-restarting" (RHEL: diz se precisa reiniciar) e a
+            // chave Uninstall do Registro (Windows: lista os programas instalados).
+            var readOnly = command.Cmd.StartsWith("systemctl status", StringComparison.Ordinal) || command.Cmd.Contains("needs-restarting", StringComparison.Ordinal) ||
+                           command.Cmd.StartsWith(@"Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\", StringComparison.Ordinal);
             if (mustConfirm.Any(word => command.Cmd.Contains(word, StringComparison.Ordinal)) && !readOnly)
             {
                 Assert.True(command.IsCaution, $"{command.Id} altera o servidor e deveria pedir confirmação: {command.Cmd}");
             }
         }
+    }
+
+    [Fact]
+    public void Category_icons_exist_in_the_icon_set()
+    {
+        // Nome errado não quebra o painel (vira um ícone genérico), então só um teste pega.
+        Assert.All(Library.Categories, c =>
+            Assert.True(Enum.TryParse<Wpf.Ui.Controls.SymbolRegular>(c.Icon, out _), $"{c.Id}: ícone {c.Icon} não existe"));
+    }
+
+    [Fact]
+    public void Database_commands_ask_for_the_password_and_never_carry_it()
+    {
+        // Política da empresa: nada de senha no comando (ficaria no histórico do shell).
+        var database = Library.AllResolved().Select(r => r.Command)
+            .Where(c => Regex.IsMatch(c.Cmd, @"\b(mysql|mysqldump|mysqladmin|redis-cli)\b")).ToList();
+
+        Assert.NotEmpty(database);
+        Assert.All(database, c =>
+        {
+            Assert.DoesNotMatch(@"\s-p\S|--password|\s-a\s|REDISCLI_AUTH", c.Cmd);
+            if (Regex.IsMatch(c.Cmd, @"\b(mysql|mysqldump|mysqladmin)\s+-u\b"))
+            {
+                Assert.Matches(@"\s-p(\s|$)", c.Cmd);
+            }
+        });
+    }
+
+    [Fact]
+    public void Commands_that_may_ask_for_a_password_are_not_piped_into_a_pager()
+    {
+        // O less disputa o teclado com a pergunta de senha (sudo, mysql -p) e a tela embaralha.
+        Assert.All(Library.AllResolved().Select(r => r.Command), c =>
+            Assert.False(Regex.IsMatch(c.Cmd, @"(\bsudo\b|\s-p(\s|$)).*\|\s*(less|more)\b"), $"{c.Id}: {c.Cmd}"));
+    }
+
+    [Fact]
+    public void Php_and_web_commands_follow_each_family()
+    {
+        CommandDefinition? Resolve(string family, string id) =>
+            Library.Categories.SelectMany(c => c.For(family)).SingleOrDefault(c => c.Id == id);
+
+        Assert.Equal("sudo tail -n 100 /var/log/php-fpm/error.log", Resolve(OsFamily.Rhel, "php.fpm-errors")!.Cmd);
+        Assert.Equal("sudo tail -n 100 /var/log/php*-fpm.log", Resolve(OsFamily.Debian, "php.fpm-errors")!.Cmd);
+        Assert.NotNull(Resolve(OsFamily.Rhel, "php.site-errors"));
+        Assert.Null(Resolve(OsFamily.Debian, "php.site-errors"));
+        Assert.Contains("reload httpd", Resolve(OsFamily.Rhel, "web.apache-reload")!.Cmd);
+        Assert.Contains("reload apache2", Resolve(OsFamily.Suse, "web.apache-reload")!.Cmd);
+
+        // Só o exemplo do campo muda por família; o comando é o mesmo.
+        var owner = (Debian: Resolve(OsFamily.Debian, "laravel.fix-owner")!, Rhel: Resolve(OsFamily.Rhel, "laravel.fix-owner")!);
+        Assert.Equal(owner.Debian.Cmd, owner.Rhel.Cmd);
+        Assert.Equal("www-data", owner.Debian.Param("usuario")!.Placeholder);
+        Assert.Equal("apache", owner.Rhel.Param("usuario")!.Placeholder);
+        Assert.Equal("sudo chown -R apache: storage bootstrap/cache",
+            CommandTemplate.Render(owner.Rhel, new Dictionary<string, string> { ["usuario"] = "apache" }));
+    }
+
+    [Fact]
+    public void Docker_go_templates_are_not_taken_as_fields()
+    {
+        var table = Library.AllCommands.Single(c => c.Id == "docker.ps-table");
+
+        Assert.Empty(CommandTemplate.FieldNames(table.Cmd));
+        Assert.Equal(table.Cmd, CommandTemplate.Render(table, new Dictionary<string, string>()));
     }
 
     [Fact]

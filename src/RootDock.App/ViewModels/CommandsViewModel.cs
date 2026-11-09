@@ -53,6 +53,11 @@ public sealed partial class CommandItemViewModel : ObservableObject
         Params = new ObservableCollection<CommandParamViewModel>(definition.Params.Select(p => new CommandParamViewModel(p, UpdatePreview)));
         _preview = definition.DisplayCommand;
         SearchText = Normalize(string.Join(' ', new[] { definition.Title, definition.Cmd, definition.Description, categoryName }.Concat(definition.Tags)));
+        _titleText = Normalize(definition.Title);
+        _tagText = Normalize(string.Join(' ', definition.Tags));
+        _categoryText = Normalize(categoryName);
+        _commandText = Normalize(definition.Cmd);
+        _descriptionText = Normalize(definition.Description);
         // Com valores padrão preenchidos, a prévia já mostra o comando final.
         UpdatePreview();
     }
@@ -106,6 +111,54 @@ public sealed partial class CommandItemViewModel : ObservableObject
     public ObservableCollection<CommandParamViewModel> Params { get; }
 
     internal string SearchText { get; }
+
+    private readonly string _titleText;
+    private readonly string _tagText;
+    private readonly string _categoryText;
+    private readonly string _commandText;
+    private readonly string _descriptionText;
+
+    /// <summary>Palavras da busca sem acentos e sem maiúsculas (como o texto pesquisado).</summary>
+    public static IReadOnlyList<string> QueryWords(string query) =>
+        Normalize(query.Trim()).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+    /// <summary>Todas as palavras aparecem em algum lugar do comando (título, comando, descrição, tema ou etiquetas).</summary>
+    public bool Matches(IReadOnlyList<string> words) => words.All(w => SearchText.Contains(w, StringComparison.Ordinal));
+
+    /// <summary>
+    /// Quanto o comando tem a ver com a busca: palavra no título vale mais que nas etiquetas, no tema
+    /// e no próprio comando; só citada na descrição, quase nada. Assim "mysql" traz primeiro os
+    /// comandos do MySQL, não um que menciona o mysql como exemplo (o Enter usa o primeiro).
+    /// </summary>
+    public int Relevance(IReadOnlyList<string> words)
+    {
+        var score = 0;
+        foreach (var w in words)
+        {
+            var strong = (StartsWord(_titleText, w) ? 10 : _titleText.Contains(w, StringComparison.Ordinal) ? 6 : 0)
+                         + (_tagText.Contains(w, StringComparison.Ordinal) ? 4 : 0)
+                         + (_categoryText.Contains(w, StringComparison.Ordinal) ? 4 : 0)
+                         + (_commandText.Contains(w, StringComparison.Ordinal) ? 3 : 0);
+            // A descrição só desempata quem não tem a palavra em nenhum outro lugar.
+            score += strong > 0 ? strong : _descriptionText.Contains(w, StringComparison.Ordinal) ? 1 : 0;
+        }
+
+        return score;
+    }
+
+    // "php" começa uma palavra em "versao do php" e em "php.ini", mas não em "ophp".
+    private static bool StartsWord(string text, string word)
+    {
+        for (var i = text.IndexOf(word, StringComparison.Ordinal); i >= 0; i = text.IndexOf(word, i + 1, StringComparison.Ordinal))
+        {
+            if (i == 0 || !char.IsLetterOrDigit(text[i - 1]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     [ObservableProperty] private bool _isFavorite;
     [ObservableProperty] private bool _isFormOpen;
@@ -476,13 +529,14 @@ public sealed partial class CommandsViewModel : ObservableObject
             _byId[item.Id] = item;
         }
 
-        var query = CommandItemViewModel.Normalize(Search.Trim());
-        if (query.Length > 0)
+        var words = CommandItemViewModel.QueryWords(Search);
+        if (words.Count > 0)
         {
             // Os temas ficam como estão (escondidos) enquanto se busca: nada de desmontar e remontar a cada letra.
-            var words = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            // Mais relevantes primeiro; no empate, a ordem de sempre (macros, meus comandos, biblioteca).
             var matches = macroItems.Concat(customItems).Concat(_builtIn.SelectMany(c => c.Items))
-                .Where(i => words.All(w => i.SearchText.Contains(w, StringComparison.Ordinal)))
+                .Where(i => i.Matches(words))
+                .OrderByDescending(i => i.Relevance(words))
                 .ToList();
             if (!IsSearching || !matches.SequenceEqual(Results))
             {

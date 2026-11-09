@@ -164,14 +164,14 @@ O ícone do programa vem de `icone.png` (raiz). Ao trocá-lo, gere de novo `src/
 
 ### Biblioteca de comandos (painel direito, Ctrl+Shift+L)
 
-- 242 comandos em 25 temas: primeiros passos, disco, memória/CPU, processos, serviços, logs, rede, usuários, pacotes, arquivos, tmux, Docker, Git, sistema, segurança, Nginx/Apache/PHP, Laravel, SAP (HANA, sapcontrol, SAP Business One) e Windows. Cada um com explicação em português e dica.
+- 361 comandos em 28 temas: primeiros passos, disco, memória/CPU, processos, serviços, logs, rede, usuários, pacotes, arquivos, tmux, Docker, Git, sistema, segurança, certificados SSL/TLS (validade, cadeia, certbot), Nginx/Apache/PHP, PHP-FPM e Composer, Laravel (deploy, fila, manutenção, logs do dia), banco de dados (MySQL/MariaDB e Redis: só consultas e backup com `mysqldump`, senha sempre pedida na hora), SAP (HANA, sapcontrol, SAP Business One) e Windows (inclusive AD: usuário bloqueado e desbloqueio). Cada um com explicação em português e dica.
 - **Sistema** (no topo do painel): Automático, Ubuntu/Debian, RHEL/CentOS/Rocky/Alma, SUSE/SLES (SAP) ou Windows. No automático segue o terminal em foco: servidor SSH pelo `/etc/os-release` (ID e ID_LIKE, lido pelo monitor), PowerShell/CMD e Área de Trabalho Remota como Windows, WSL como Ubuntu. Os comandos mudam por sistema (`apt`/`dnf`/`zypper`, `ufw`/`firewalld`, `auth.log`/`secure`, `needs-restarting`, SELinux/AppArmor, `saptune`...); escolher um sistema fixa a lista e a escolha fica salva.
 - **Windows:** atalhos Win+R (`ncpa.cpl`, `services.msc`, `eventvwr.msc`, `diskmgmt.msc`, `appwiz.cpl`, `%temp%`, `shell:startup`...) abrem neste computador; com uma Área de Trabalho Remota em foco, o atalho é copiado para colar lá. Comandos de rede, sistema, serviços, disco, logs e usuários vão para o PowerShell/CMD ativo (ou SSH num servidor Windows); os de PowerShell funcionam também no CMD (`powershell -NoProfile -Command ...`).
 - Avisa quando a lista não combina com o terminal (comando de Linux num PowerShell, ou de Windows num servidor Linux) em vez de digitar.
 - Clique executa no terminal ativo; comandos com campos abrem um formulário com prévia do comando final. Os valores são escapados para o shell e não podem começar com "-".
 - Atalhos do tmux (Ctrl+B D, Ctrl+B %, ...) são enviados como teclas.
 - Segurança: comandos que alteram algo pedem confirmação (mais forte em produção); nada destrutivo entra na biblioteca (garantido por teste, `CommandSafety`); se houver um programa de tela cheia aberto (vim, top, less), o painel avisa antes de digitar nele; valores dos comandos de Windows usam aspas do PowerShell ou do CMD (e recusam `%` e `"` no CMD).
-- Busca sem acentos, Favoritos, Usados recentemente, "Meus comandos" (com campos `{{nome}}`), "Minhas macros", copiar e colocar sem executar.
+- Busca sem acentos e por relevância (palavra no título vem antes da que só aparece na descrição; o Enter usa o primeiro), Favoritos, Usados recentemente, "Meus comandos" (com campos `{{nome}}`), "Minhas macros", copiar e colocar sem executar.
 - O conteúdo fica em `src/RootDock.Core/Commands/commands.pt-BR.json`.
 
 ### Macros (Ferramentas → Macros)
