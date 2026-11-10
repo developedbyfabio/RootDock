@@ -151,6 +151,26 @@ paneHooks.push((pane) => {
   pane.highlighter = new Highlighter(pane);
 });
 
+// ------------------------------------------------ Prompt novo sem cor herdada
+// O bash (5.1+), o zsh e o fish ligam o "colar entre colchetes" (ESC[?2004h) ao abrir a linha de
+// comando, logo antes do prompt. Vídeo invertido, fundo ou cor que um programa deixou ligados até
+// ali (interrompido no meio de uma saída colorida, por exemplo) são sobra: sem zerar, pintam o
+// prompt e tudo o que vem depois quando o prompt não tem cor própria (o do root no Ubuntu não tem),
+// e a tela fica "branca" até algum programa zerar as cores.
+// Só na tela normal: tmux, vim e afins (tela alternativa) controlam os próprios atributos.
+function resetAttributesAtPrompt(term) {
+  term.parser.registerCsiHandler({ prefix: '?', final: 'h' }, (params) => {
+    if (term.buffer.active.type === 'normal' && params.includes(2004)) {
+      // Mesmo efeito de ESC[0m, neste ponto da leitura (a API pública do xterm não oferece isso).
+      const handler = term._core && term._core._inputHandler;
+      if (handler && typeof handler._processSGR0 === 'function') handler._processSGR0(handler._curAttrData);
+    }
+    return false; // o xterm continua tratando o modo normalmente
+  });
+}
+
+paneHooks.push((pane) => resetAttributesAtPrompt(pane.term));
+
 // ------------------------------------------------ Salvar o conteúdo do terminal
 function terminalText(pane) {
   const buf = pane.term.buffer.active;

@@ -340,9 +340,11 @@ public sealed class TerminalSession : IDisposable, ITerminalPrompter
         }
 
         _connectCts = new CancellationTokenSource();
+        var columns = _columns;
+        var rows = _rows;
         try
         {
-            var connection = await _connector.ConnectAsync(Entry, _columns, _rows, this, _connectCts.Token, ReuseCredentials, ReuseJumps);
+            var connection = await _connector.ConnectAsync(Entry, columns, rows, this, _connectCts.Token, ReuseCredentials, ReuseJumps);
             if (_disposed)
             {
                 connection.Dispose();
@@ -350,6 +352,16 @@ public sealed class TerminalSession : IDisposable, ITerminalPrompter
             }
 
             _connection = connection;
+
+            // Conectar leva segundos (senha, chave do servidor, bastion) e a tela pode mudar de tamanho
+            // nesse meio tempo (painéis se ajustando, janela maximizando): sem conexão, esse tamanho não
+            // tinha para onde ir. Sem repassar, o servidor fica com o antigo e o bash desenha a linha
+            // achando outra largura: colar, setas, histórico e Ctrl+R embaralham a tela.
+            if (_columns != columns || _rows != rows)
+            {
+                connection.Resize(_columns, _rows);
+            }
+
             var generation = Interlocked.Increment(ref _generation);
             _dataHandler = data => OnData(generation, data);
             connection.DataReceived += _dataHandler;

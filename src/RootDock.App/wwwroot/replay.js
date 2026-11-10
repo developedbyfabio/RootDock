@@ -95,6 +95,7 @@ class ReplayPane {
       allowProposedApi: true,
     });
     this.term.loadAddon(new Unicode11AddonShim());
+    resetAttributesAtPrompt(this.term); // a gravação aparece como apareceu ao vivo
     this.term.open(this.termEl);
     this.el.addEventListener('mousedown', () => setActivePane(this));
     this.renderTime();
