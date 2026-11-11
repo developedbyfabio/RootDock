@@ -28,7 +28,7 @@ class VncPane {
     this.state = 'connecting';
     this.tab = null;
     this.rfb = null;
-    this.scale = true;
+    this.mode = 'fit'; // fit = a tela inteira cabe na aba | expand = ocupa a altura da aba e rola para os lados
     this.viewOnly = false;
     this.triedSaved = false;
     this.savedPassword = null;
@@ -73,11 +73,8 @@ class VncPane {
     };
     this.cadBtn = b('Ctrl+Alt+Del', 'Envia Ctrl+Alt+Del ao computador remoto', () => this.rfb && this.rfb.sendCtrlAltDel());
     this.pasteBtn = b('Colar texto', 'Envia o texto da área de transferência deste computador para a do computador remoto', () => send({ type: 'vncClipboardRequest', id: this.id }));
-    this.scaleBtn = b('Ajustar à janela', 'Liga/desliga o encaixe da tela remota no tamanho da aba', (btn) => {
-      this.scale = !this.scale;
-      btn.classList.toggle('on', this.scale);
-      if (this.rfb) this.rfb.scaleViewport = this.scale;
-    });
+    this.scaleBtn = b('Ajustar à janela', 'Mostra a tela remota inteira dentro da aba', () => this.setMode('fit'));
+    this.expandBtn = b('Expandir', 'Aumenta a tela remota até ocupar a altura da aba e rola para os lados (bom para dois monitores)', () => this.setMode('expand'));
     this.scaleBtn.classList.add('on');
     this.viewBtn = b('Só visualizar', 'Bloqueia teclado e mouse (assistir sem mexer)', (btn) => {
       this.viewOnly = !this.viewOnly;
@@ -87,7 +84,7 @@ class VncPane {
     this.fullBtn = b('Tela cheia', 'Tela cheia (Esc sai)', () => this.screen.requestFullscreen && this.screen.requestFullscreen().catch(() => {}));
     this.disconnectBtn = b('Desconectar', 'Encerra a conexão VNC', () => this.rfb && this.rfb.disconnect());
     this.reconnectBtn = b('Reconectar', 'Conectar de novo', () => this.connect());
-    bar.append(icon, name, this.desktopName, this.stateChip, el('span', 'spacer'), this.cadBtn, this.pasteBtn, this.scaleBtn, this.viewBtn, this.fullBtn, this.disconnectBtn, this.reconnectBtn);
+    bar.append(icon, name, this.desktopName, this.stateChip, el('span', 'spacer'), this.cadBtn, this.pasteBtn, this.scaleBtn, this.expandBtn, this.viewBtn, this.fullBtn, this.disconnectBtn, this.reconnectBtn);
     this.toolbar = bar;
   }
 
@@ -168,7 +165,7 @@ class VncPane {
     }
     this.canvasHost.replaceChildren();
     const rfb = new RFB(this.canvasHost, url, { wsProtocols: ['binary'] });
-    rfb.scaleViewport = this.scale;
+    rfb.scaleViewport = true;
     rfb.resizeSession = false;
     rfb.viewOnly = this.viewOnly;
     rfb.focusOnClick = true;
@@ -215,6 +212,39 @@ class VncPane {
       if (e.detail && e.detail.text) send({ type: 'copy', text: e.detail.text });
     });
     this.rfb = rfb;
+    // A tela remota pode mudar de resolução no meio da sessão: a largura do modo Expandir acompanha.
+    if (this.canvasObserver) this.canvasObserver.disconnect();
+    const canvas = this.canvasHost.querySelector('canvas');
+    if (canvas) {
+      this.canvasObserver = new MutationObserver(() => this.scheduleFit());
+      this.canvasObserver.observe(canvas, { attributes: true, attributeFilter: ['width', 'height'] });
+    }
+  }
+
+  setMode(mode) {
+    this.mode = mode;
+    this.scaleBtn.classList.toggle('on', mode === 'fit');
+    this.expandBtn.classList.toggle('on', mode === 'expand');
+    this.screen.scrollLeft = 0;
+    this.layoutExpand();
+    if (this.rfb) this.rfb.scaleViewport = true;
+  }
+
+  // Expandir: a área do noVNC fica com a altura da aba e a largura proporcional à tela remota;
+  // o que passar da aba rola para os lados. O noVNC encaixa a imagem nessa área (mesma proporção).
+  layoutExpand() {
+    const rfb = this.rfb;
+    const canvas = this.canvasHost.querySelector('canvas');
+    const w = (rfb && rfb._fbWidth) || (canvas && canvas.width) || 0;
+    const h = (rfb && rfb._fbHeight) || (canvas && canvas.height) || 0;
+    const active = this.mode === 'expand' && this.state === 'connected' && w > 0 && h > 0;
+    this.screen.classList.toggle('expand', active);
+    if (!active) {
+      this.canvasHost.style.width = '';
+      return;
+    }
+    const width = Math.round(this.screen.clientHeight * w / h); // clientHeight já desconta a barra
+    this.canvasHost.style.width = Math.max(width, this.screen.clientWidth) + 'px';
   }
 
   askPassword() {
@@ -235,7 +265,7 @@ class VncPane {
     this.el.classList.toggle('closed', s === 'closed');
     this.stateChip.textContent = s === 'connected' ? 'conectado' : s === 'closed' ? 'desconectado' : s === 'password' ? 'aguardando senha' : 'conectando…';
     this.stateChip.className = 'rdp-chip ' + (s === 'password' ? 'connecting' : s);
-    for (const b of [this.cadBtn, this.pasteBtn, this.scaleBtn, this.viewBtn, this.fullBtn, this.disconnectBtn]) b.hidden = s !== 'connected';
+    for (const b of [this.cadBtn, this.pasteBtn, this.scaleBtn, this.expandBtn, this.viewBtn, this.fullBtn, this.disconnectBtn]) b.hidden = s !== 'connected';
     this.reconnectBtn.hidden = s !== 'closed';
     this.card.hidden = s === 'connected';
     this.canvasHost.style.visibility = s === 'connected' ? 'visible' : 'hidden';
@@ -245,6 +275,7 @@ class VncPane {
     this.cardText.textContent = s === 'password'
       ? (this.lastError ? this.lastError + ' ' : '') + 'O VNC pede só a senha (sem usuário).'
       : this.message;
+    this.layoutExpand();
     this.cardSpinner.hidden = s !== 'connecting';
     this.passwordForm.hidden = s !== 'password';
     this.cardActions.hidden = s !== 'closed';
@@ -272,7 +303,8 @@ class VncPane {
 
   fitNow() {
     // O noVNC recalcula a escala quando a opção é aplicada de novo.
-    if (this.rfb && this.state === 'connected' && this.scale) this.rfb.scaleViewport = true;
+    this.layoutExpand();
+    if (this.rfb && this.state === 'connected') this.rfb.scaleViewport = true;
   }
 
   focus() {
@@ -285,6 +317,7 @@ class VncPane {
   dispose() {
     this.disposed = true;
     this.resizeObserver.disconnect();
+    if (this.canvasObserver) this.canvasObserver.disconnect();
     if (this.rfb) {
       try {
         this.rfb.disconnect();

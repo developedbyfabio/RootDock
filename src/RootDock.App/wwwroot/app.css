@@ -784,6 +784,9 @@ button.ed-item:hover { background: var(--bg-hover); color: var(--text); }
 /* ---------- VNC ---------- */
 .vnc-canvas { position: absolute; inset: 0; overflow: hidden; }
 .vnc-canvas > div { background: var(--inset) !important; }
+/* Expandir: tela remota na altura da aba, com rolagem para os lados. */
+.vnc-screen.expand { overflow-x: scroll; overflow-y: hidden; scrollbar-color: color-mix(in srgb, var(--text-dim) 45%, transparent) transparent; }
+.vnc-screen.expand .vnc-canvas { right: auto; }
 .rdp-btn.on { border-color: var(--accent); color: var(--accent); }
 .vnc-password { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin-top: 6px; max-width: 420px; }
 .vnc-password[hidden] { display: none; }
