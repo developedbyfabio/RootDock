@@ -327,6 +327,17 @@ public partial class FilesPanel : UserControl
     /// <summary>Abre o gerenciador em duas colunas para estes arquivos.</summary>
     public Action<RemoteFilesViewModel>? OpenManager { get; set; }
 
+    /// <summary>Abre a transferência entre servidores com este servidor (e a pasta atual) já na esquerda.</summary>
+    public Action<RemoteFilesViewModel>? OpenServerTransfer { get; set; }
+
+    private void OnOpenServerTransfer(object sender, RoutedEventArgs e)
+    {
+        if (Vm is { } vm)
+        {
+            OpenServerTransfer?.Invoke(vm);
+        }
+    }
+
     private void OnOpenManager(object sender, RoutedEventArgs e)
     {
         if (Vm is { } vm)

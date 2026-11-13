@@ -136,6 +136,29 @@ public sealed class KnownHostsStore
         return types;
     }
 
+    /// <summary>
+    /// As chaves salvas do host como linhas de known_hosts ("host tipo chave"), para entregar a outro
+    /// programa só o que já foi conferido aqui.
+    /// </summary>
+    public IReadOnlyList<string> Lines(string host, int port)
+    {
+        var token = HostToken(host, port);
+        var lines = new List<string>();
+        foreach (var file in new[] { _ownFile }.Concat(_readOnlyFiles))
+        {
+            foreach (var entry in ReadEntries(file))
+            {
+                var line = $"{token} {entry.KeyType} {entry.Key64}";
+                if (entry.Matches(token) && !lines.Contains(line))
+                {
+                    lines.Add(line);
+                }
+            }
+        }
+
+        return lines;
+    }
+
     /// <summary>Grava a chave como confiável, substituindo a anterior do mesmo tipo para este host.</summary>
     public void Trust(string host, int port, byte[] keyBlob, string fallbackKeyType)
     {

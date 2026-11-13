@@ -100,7 +100,7 @@
             <TextBlock x:Name="RdpCardTitle" Margin="0,12,0,0" FontWeight="SemiBold" FontSize="14" TextAlignment="Center" TextWrapping="Wrap" />
             <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" TextAlignment="Center" Foreground="{DynamicResource RdTextDim}" FontSize="12.5"
                        Text="Os arquivos deste computador e os do servidor lado a lado: arraste ou use as setas para copiar nos dois sentidos." />
-            <ui:Button x:Name="RdpFilesButton" Content="Abrir arquivos lado a lado" Icon="{ui:SymbolIcon ArrowSwap20}" Appearance="Primary"
+            <ui:Button x:Name="RdpFilesButton" Content="Computador ↔ Servidor" Appearance="Primary"
                        HorizontalAlignment="Center" Margin="0,16,0,0" Padding="14,8" Click="OnOpenRdpFiles" />
             <TextBlock Margin="0,14,0,0" TextWrapping="Wrap" TextAlignment="Center" Foreground="{DynamicResource RdTextDim}" FontSize="11"
                        Text="Usa o compartilhamento de arquivos do Windows (porta 445) com o mesmo login da Área de Trabalho Remota. Para ver as unidades (C:, D:) o usuário precisa ser administrador do servidor." />
@@ -109,9 +109,13 @@
         <DockPanel x:Name="ContentRoot" LastChildFill="True">
             <!-- Gerenciador em duas colunas (como o WinSCP) -->
             <ui:Button x:Name="ManagerButton" DockPanel.Dock="Top" Margin="8,8,8,0" Padding="10,7" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                       Content="Abrir lado a lado" Icon="{ui:SymbolIcon ArrowSwap20}" Click="OnOpenManager"
-                       AutomationProperties.Name="Abrir lado a lado"
-                       ToolTip="Gerenciador em duas colunas, como o WinSCP: este computador e o servidor lado a lado (arrastar, copiar, renomear, excluir, comparar, sincronizar)" />
+                       Content="Computador ↔ Servidor" Click="OnOpenManager"
+                       AutomationProperties.Name="Computador ↔ Servidor"
+                       ToolTip="Transferir arquivos entre este computador e o servidor, em duas colunas como o WinSCP (arrastar, copiar, renomear, excluir, comparar, sincronizar)" />
+            <ui:Button x:Name="ServerTransferButton" DockPanel.Dock="Top" Margin="8,6,8,0" Padding="10,7" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                       Content="Servidor ↔ Servidor" Click="OnOpenServerTransfer"
+                       AutomationProperties.Name="Servidor ↔ Servidor"
+                       ToolTip="Transferir arquivos e pastas deste servidor para outro (ou de outro para este), direto entre os dois quando der" />
             <!-- Caminho -->
             <Grid DockPanel.Dock="Top" Margin="8,8,8,4">
                 <Grid.ColumnDefinitions>

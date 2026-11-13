@@ -82,6 +82,8 @@ public partial class MainWindow : FluentWindow
         FilesView.OpenManager = vm => FileManagerWindow.ShowFor(this,
             FileManagerWindow.SftpSource(vm, () => _workspace.Sessions.FirstOrDefault(s => s.Files == vm)?.SshClient, editors),
             _transfers, _transferHistory);
+        _serverLinks = new ServerLinkFactory(this, _workspace, _knownHosts, _vault);
+        FilesView.OpenServerTransfer = vm => OpenServerTransfer(vm.Session, vm.CurrentPath);
         _rdp = new Rdp.RdpService(_workspace, WebView, RdpLayer, this, _vault, _sessions, Notify)
         {
             Transfers = _transfers,
@@ -426,7 +428,7 @@ public partial class MainWindow : FluentWindow
                 if (node.Session.Kind == SessionKind.Rdp && node.Session.Host.Length > 0)
                 {
                     // Sem abrir a Área de Trabalho Remota: só os arquivos, lado a lado com os deste computador.
-                    menu.Items.Add(MenuItem("Arquivos do servidor (lado a lado)", () => _ = _rdp.OpenFilesAsync(node.Session, known: null)));
+                    menu.Items.Add(MenuItem("Arquivos: Computador ↔ Servidor", () => _ = _rdp.OpenFilesAsync(node.Session, known: null)));
                 }
 
                 menu.Items.Add(MenuItem("Editar...", () => EditSession(node.Session), "F2"));
@@ -513,6 +515,7 @@ public partial class MainWindow : FluentWindow
     private readonly Rdp.RdpService _rdp;
     private readonly Vnc.VncService _vnc;
     private readonly FtpService _ftp;
+    private readonly ServerLinkFactory _serverLinks;
     private readonly Core.History.CommandHistory _history;
     private readonly Core.History.TransferHistory _transferHistory;
 

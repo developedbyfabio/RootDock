@@ -1,0 +1,217 @@
+<ui:FluentWindow x:Class="RootDock.App.Dialogs.ServerTransferWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="Servidor ↔ Servidor"
+                 Width="1280" Height="800" MinWidth="960" MinHeight="560"
+                 WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="None"
+                 ShowInTaskbar="True"
+                 Background="{DynamicResource RdSurface}">
+    <ui:FluentWindow.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolVis" />
+
+        <DataTemplate x:Key="RowTemplate">
+            <Grid ToolTip="{Binding ToolTip}" Opacity="{Binding Opacity}" Background="Transparent">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="26" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="86" />
+                    <ColumnDefinition Width="118" />
+                    <ColumnDefinition Width="94" />
+                </Grid.ColumnDefinitions>
+                <ui:SymbolIcon Symbol="{Binding Icon}" Foreground="{Binding IconBrush}" FontSize="16" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="{Binding SizeText}" Foreground="{DynamicResource RdTextDim}" HorizontalAlignment="Right" Margin="0,0,10,0" VerticalAlignment="Center" FontSize="12" />
+                <TextBlock Grid.Column="3" Text="{Binding ModifiedText}" Foreground="{DynamicResource RdTextDim}" VerticalAlignment="Center" FontSize="12" />
+                <TextBlock Grid.Column="4" Text="{Binding Permissions}" Foreground="{DynamicResource RdTextDim}" VerticalAlignment="Center" FontSize="11.5"
+                           FontFamily="Cascadia Mono, Consolas" />
+            </Grid>
+        </DataTemplate>
+
+        <Style x:Key="Rows" TargetType="ListBoxItem" BasedOn="{StaticResource RdListItem}">
+            <Setter Property="Padding" Value="8,3" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+    </ui:FluentWindow.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <ui:TitleBar x:Name="TitleBar" Title="Servidor ↔ Servidor · transferir arquivos entre dois servidores" />
+
+        <!-- Opções da cópia -->
+        <DockPanel Grid.Row="1" Margin="16,2,16,10">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Caminho da cópia" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="{DynamicResource RdTextDim}" />
+                <ComboBox x:Name="ModeBox" Width="250" Margin="0,0,14,0" SelectedIndex="0"
+                          AutomationProperties.Name="Caminho da cópia"
+                          ToolTip="Automático: tenta direto entre os servidores (rsync, mais rápido: os dados não passam por este computador). Se não der, passa pelo RootDock (SFTP), que funciona sempre.">
+                    <ComboBoxItem Content="Automático (direto, se der)" />
+                    <ComboBoxItem Content="Direto entre os servidores (rsync)" />
+                    <ComboBoxItem Content="Pelo RootDock (SFTP)" />
+                </ComboBox>
+                <CheckBox x:Name="PreserveBox" Content="Manter data e permissões" IsChecked="True" Margin="0,0,14,0" MinWidth="0"
+                          ToolTip="Os arquivos chegam com a mesma data de modificação e as mesmas permissões. No modo direto, também dono e grupo (quando o usuário do destino pode). Desmarcado: data de agora e permissões padrão do destino." />
+                <CheckBox x:Name="SkipBox" Content="Não substituir o que já existe" Margin="0,0,14,0" MinWidth="0"
+                          ToolTip="Arquivos com o mesmo nome no destino ficam como estão. Desmarcado: são atualizados pela versão da origem." />
+                <ui:Button Content="Sincronizar →" Margin="0,0,8,0" Click="OnSyncRight"
+                           ToolTip="Copia (com subpastas) o que falta ou mudou da pasta da esquerda para a da direita. Não apaga nada." />
+                <ui:Button Content="← Sincronizar" Click="OnSyncLeft"
+                           ToolTip="Copia (com subpastas) o que falta ou mudou da pasta da direita para a da esquerda. Não apaga nada." />
+            </StackPanel>
+        </DockPanel>
+
+        <!-- Dois servidores -->
+        <Grid Grid.Row="2" Margin="16,0,16,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="64" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Background="{DynamicResource RdPanel}" BorderBrush="{DynamicResource RdBorder}" BorderThickness="1" CornerRadius="8">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Margin="10,8,10,6">
+                        <DockPanel Margin="0,0,0,6">
+                            <ui:SymbolIcon Symbol="Server20" FontSize="16" Margin="0,0,6,0" Foreground="{DynamicResource RdAccent}" />
+                            <ComboBox x:Name="LeftServer" Tag="L" SelectionChanged="OnServerChanged" AutomationProperties.Name="Servidor da esquerda"
+                                      ToolTip="Sessões SSH salvas e as que estão abertas agora" />
+                        </DockPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ui:Button Tag="L" Icon="{ui:SymbolIcon ArrowUp20}" Appearance="Transparent" Padding="6" Click="OnUp" ToolTip="Pasta acima (Backspace)" />
+                            <ui:Button Grid.Column="1" Tag="L" Icon="{ui:SymbolIcon Home20}" Appearance="Transparent" Padding="6" Click="OnHome" ToolTip="Pasta pessoal" />
+                            <ui:TextBox Grid.Column="2" x:Name="LeftPath" Tag="L" FontFamily="Cascadia Mono, Consolas" FontSize="12" Padding="8,5" KeyDown="OnPathKey"
+                                        AutomationProperties.Name="Pasta da esquerda" />
+                            <StackPanel Grid.Column="3" Orientation="Horizontal">
+                                <ui:Button Tag="L" Icon="{ui:SymbolIcon ArrowClockwise20}" Appearance="Transparent" Padding="6" Click="OnRefresh" ToolTip="Atualizar (F5)" />
+                                <ui:Button Tag="L" AutomationProperties.Name="Nova pasta na esquerda" Icon="{ui:SymbolIcon FolderAdd20}" Appearance="Transparent" Padding="6" Click="OnNewFolder" ToolTip="Nova pasta (F7)" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Bottom" x:Name="LeftFooter" Margin="10,4,10,6" Foreground="{DynamicResource RdTextDim}" FontSize="11.5" TextTrimming="CharacterEllipsis" />
+                    <Grid>
+                        <ListBox x:Name="LeftList" Tag="L" FocusVisualStyle="{x:Null}" SelectionMode="Extended" ItemTemplate="{StaticResource RowTemplate}" ItemContainerStyle="{StaticResource Rows}"
+                                 BorderThickness="0" Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 MouseDoubleClick="OnOpen" KeyDown="OnListKey" AutomationProperties.Name="Arquivos da esquerda" />
+                        <TextBlock x:Name="LeftHint" Margin="24" TextWrapping="Wrap" TextAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource RdTextDim}" Text="Escolha o servidor acima." />
+                    </Grid>
+                </DockPanel>
+            </Border>
+
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <ui:Button AutomationProperties.Name="Copiar para a direita" Icon="{ui:SymbolIcon ArrowRight24}" Appearance="Primary" Padding="10" Margin="0,0,0,10" Click="OnCopyRight"
+                           ToolTip="Copiar os selecionados da esquerda para a pasta da direita" />
+                <ui:Button AutomationProperties.Name="Copiar para a esquerda" Icon="{ui:SymbolIcon ArrowLeft24}" Padding="10" Click="OnCopyLeft"
+                           ToolTip="Copiar os selecionados da direita para a pasta da esquerda" />
+            </StackPanel>
+
+            <Border Grid.Column="2" Background="{DynamicResource RdPanel}" BorderBrush="{DynamicResource RdBorder}" BorderThickness="1" CornerRadius="8">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Margin="10,8,10,6">
+                        <DockPanel Margin="0,0,0,6">
+                            <ui:SymbolIcon Symbol="Server20" FontSize="16" Margin="0,0,6,0" Foreground="{DynamicResource RdAccent}" />
+                            <ComboBox x:Name="RightServer" Tag="R" SelectionChanged="OnServerChanged" AutomationProperties.Name="Servidor da direita"
+                                      ToolTip="Sessões SSH salvas e as que estão abertas agora" />
+                        </DockPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ui:Button Tag="R" Icon="{ui:SymbolIcon ArrowUp20}" Appearance="Transparent" Padding="6" Click="OnUp" ToolTip="Pasta acima (Backspace)" />
+                            <ui:Button Grid.Column="1" Tag="R" Icon="{ui:SymbolIcon Home20}" Appearance="Transparent" Padding="6" Click="OnHome" ToolTip="Pasta pessoal" />
+                            <ui:TextBox Grid.Column="2" x:Name="RightPath" Tag="R" FontFamily="Cascadia Mono, Consolas" FontSize="12" Padding="8,5" KeyDown="OnPathKey"
+                                        AutomationProperties.Name="Pasta da direita" />
+                            <StackPanel Grid.Column="3" Orientation="Horizontal">
+                                <ui:Button Tag="R" Icon="{ui:SymbolIcon ArrowClockwise20}" Appearance="Transparent" Padding="6" Click="OnRefresh" ToolTip="Atualizar (F5)" />
+                                <ui:Button Tag="R" AutomationProperties.Name="Nova pasta na direita" Icon="{ui:SymbolIcon FolderAdd20}" Appearance="Transparent" Padding="6" Click="OnNewFolder" ToolTip="Nova pasta (F7)" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Bottom" x:Name="RightFooter" Margin="10,4,10,6" Foreground="{DynamicResource RdTextDim}" FontSize="11.5" TextTrimming="CharacterEllipsis" />
+                    <Grid>
+                        <ListBox x:Name="RightList" Tag="R" FocusVisualStyle="{x:Null}" SelectionMode="Extended" ItemTemplate="{StaticResource RowTemplate}" ItemContainerStyle="{StaticResource Rows}"
+                                 BorderThickness="0" Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 MouseDoubleClick="OnOpen" KeyDown="OnListKey" AutomationProperties.Name="Arquivos da direita" />
+                        <TextBlock x:Name="RightHint" Margin="24" TextWrapping="Wrap" TextAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource RdTextDim}" Text="Escolha o servidor acima." />
+                    </Grid>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- Transferências -->
+        <Border Grid.Row="3" Margin="16,10,16,16" Background="{DynamicResource RdPanel}" BorderBrush="{DynamicResource RdBorder}" BorderThickness="1" CornerRadius="8" Padding="10,8" Height="190">
+            <DockPanel>
+                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                    <TextBlock Text="Transferências" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <ui:Button DockPanel.Dock="Right" Content="Limpar concluídas" Padding="8,2" FontSize="12" Click="OnClearFinished" />
+                    <TextBlock x:Name="ModeStatus" Margin="14,0,10,0" VerticalAlignment="Center" Foreground="{DynamicResource RdTextDim}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                </DockPanel>
+                <Grid>
+                    <ItemsControl x:Name="QueueList"
+                                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.Template>
+                            <ControlTemplate TargetType="ItemsControl">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" CanContentScroll="True">
+                                    <ItemsPresenter />
+                                </ScrollViewer>
+                            </ControlTemplate>
+                        </ItemsControl.Template>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="18" />
+                                        <ColumnDefinition Width="300" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding DirectionGlyph}" Foreground="{DynamicResource RdAccent}" FontWeight="Bold" VerticalAlignment="Center" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
+                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding Server}" Foreground="{DynamicResource RdTextDim}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                        <ProgressBar Height="4" Minimum="0" Maximum="100" Value="{Binding Percent, Mode=OneWay}" />
+                                        <TextBlock Text="{Binding Detail}" Foreground="{DynamicResource RdTextDim}" FontSize="11" Margin="0,3,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Detail}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center">
+                                        <ui:Button Icon="{ui:SymbolIcon Pause16}" Appearance="Transparent" Padding="4" MinWidth="0" ToolTip="Pausar"
+                                                   Command="{Binding PauseCommand}" Visibility="{Binding CanPause, Converter={StaticResource BoolVis}}" />
+                                        <ui:Button Icon="{ui:SymbolIcon Play16}" Appearance="Transparent" Padding="4" MinWidth="0" ToolTip="Retomar"
+                                                   Command="{Binding ResumeCommand}" Visibility="{Binding CanResume, Converter={StaticResource BoolVis}}" />
+                                        <ui:Button Icon="{ui:SymbolIcon Dismiss16}" Appearance="Transparent" Padding="4" MinWidth="0" ToolTip="Cancelar"
+                                                   Command="{Binding CancelCommand}" Visibility="{Binding CanPause, Converter={StaticResource BoolVis}}" />
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock x:Name="QueueEmpty" Text="Nenhuma transferência agora. Selecione arquivos ou pastas de um lado e use as setas no meio."
+                               Foreground="{DynamicResource RdTextDim}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Grid>
+            </DockPanel>
+        </Border>
+    </Grid>
+</ui:FluentWindow>

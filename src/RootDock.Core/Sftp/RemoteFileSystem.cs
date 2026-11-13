@@ -259,6 +259,212 @@ public sealed class RemoteFileSystem : IFileTransport
             return true;
         });
 
+    /// <summary>
+    /// Copia um arquivo deste servidor para outro sem passar pelo disco deste computador: lê daqui e
+    /// grava lá ao mesmo tempo. Grava em "nome.rootdock-part" e só troca o nome depois de conferir
+    /// o tamanho e que a origem não mudou no meio, então o destino nunca fica com um arquivo pela
+    /// metade no nome final. Com <paramref name="resume"/> continua de um parcial desta transferência.
+    /// </summary>
+    public Task CopyFileToAsync(
+        RemoteFileSystem target, string sourcePath, string targetPath, bool preserve, bool resume,
+        IProgress<long>? progress, CancellationToken ct, Func<bool>? keepPartial = null) =>
+        RunAsync(ct, outer => target.RunAsync(outer, async token =>
+        {
+            var before = await _client.GetAttributesAsync(sourcePath, token).ConfigureAwait(false);
+            if (!before.IsRegularFile)
+            {
+                throw new IOException($"{RemotePath.Name(sourcePath)} não é um arquivo comum (dispositivo, fila ou socket).");
+            }
+
+            var temp = targetPath + LocalFiles.PartialSuffix;
+            long offset = 0;
+            if (resume)
+            {
+                try
+                {
+                    var partial = await target._client.GetAttributesAsync(temp, token).ConfigureAwait(false);
+                    offset = partial.Size > 0 && partial.Size < before.Size ? partial.Size : 0;
+                }
+                catch (SftpPathNotFoundException)
+                {
+                }
+            }
+
+            try
+            {
+                if (offset > 0)
+                {
+                    await CopyFromOffsetAsync(target, sourcePath, temp, offset, progress, token).ConfigureAwait(false);
+                }
+                else
+                {
+                    await CopyPipedAsync(target, sourcePath, temp, progress, token).ConfigureAwait(false);
+                }
+
+                var written = await target._client.GetAttributesAsync(temp, token).ConfigureAwait(false);
+                var after = await _client.GetAttributesAsync(sourcePath, token).ConfigureAwait(false);
+                if (after.Size != before.Size || after.LastWriteTimeUtc != before.LastWriteTimeUtc)
+                {
+                    throw new IOException($"{RemotePath.Name(sourcePath)} mudou no servidor de origem durante a cópia. Tente de novo quando ele não estiver sendo gravado.");
+                }
+
+                if (written.Size != before.Size)
+                {
+                    throw new IOException($"{RemotePath.Name(sourcePath)}: o destino ficou com {written.Size} bytes e a origem tem {before.Size}.");
+                }
+
+                if (preserve)
+                {
+                    await Task.Run(() =>
+                    {
+                        target._client.ChangePermissions(temp, PermissionDigits(before));
+                        target._client.SetLastWriteTimeUtc(temp, before.LastWriteTimeUtc);
+                    }, token).ConfigureAwait(false);
+                }
+
+                await target.ReplaceAsync(temp, targetPath, token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (keepPartial?.Invoke() == true)
+            {
+                throw; // pausa: o parcial fica no destino para continuar
+            }
+            catch
+            {
+                try
+                {
+                    await target._client.DeleteFileAsync(temp, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is SshException or IOException or ObjectDisposedException or InvalidOperationException)
+                {
+                    // sem conexão ou sem parcial: nada a limpar
+                }
+
+                throw;
+            }
+
+            return true;
+        }));
+
+    /// <summary>Cópia do início: a leitura adiantada e a escrita em fila do SSH.NET ligadas por um tubo em memória.</summary>
+    private async Task CopyPipedAsync(RemoteFileSystem target, string sourcePath, string temp, IProgress<long>? progress, CancellationToken token)
+    {
+        var pipe = new System.IO.Pipelines.Pipe(new System.IO.Pipelines.PipeOptions(
+            pauseWriterThreshold: 16 << 20, resumeWriterThreshold: 8 << 20, useSynchronizationContext: false));
+        using var both = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var report = progress is null
+            ? null
+            : new DirectProgress<UploadFileProgressReport>(r => progress.Report((long)r.TotalBytesUploaded));
+
+        var read = Task.Run(async () =>
+        {
+            try
+            {
+                await using var output = pipe.Writer.AsStream(leaveOpen: true);
+                await _client.DownloadFileAsync(sourcePath, output, both.Token).ConfigureAwait(false);
+                await pipe.Writer.CompleteAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                await pipe.Writer.CompleteAsync(ex).ConfigureAwait(false);
+                both.Cancel();
+                throw;
+            }
+        });
+        var write = Task.Run(async () =>
+        {
+            try
+            {
+                await using var input = pipe.Reader.AsStream(leaveOpen: true);
+                await target._client.UploadFileAsync(input, temp, true, report, both.Token).ConfigureAwait(false);
+                await pipe.Reader.CompleteAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                await pipe.Reader.CompleteAsync(ex).ConfigureAwait(false);
+                both.Cancel();
+                throw;
+            }
+        });
+
+        try
+        {
+            await Task.WhenAll(read, write).ConfigureAwait(false);
+        }
+        catch (Exception) when (!token.IsCancellationRequested)
+        {
+            // Um lado falhou e o outro foi cancelado por causa disso: mostra a falha, não o cancelamento.
+            var failure = new[] { read, write }
+                .Where(t => t.IsFaulted)
+                .Select(t => t.Exception!.GetBaseException())
+                .FirstOrDefault(e => e is not OperationCanceledException);
+            if (failure is not null)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+            }
+
+            throw;
+        }
+    }
+
+    /// <summary>Retomada: continua do ponto em que o parcial do destino parou.</summary>
+    private async Task CopyFromOffsetAsync(RemoteFileSystem target, string sourcePath, string temp, long offset, IProgress<long>? progress, CancellationToken token)
+    {
+        await using var input = await _client.OpenAsync(sourcePath, FileMode.Open, FileAccess.Read, token).ConfigureAwait(false);
+        await using var output = await target._client.OpenAsync(temp, FileMode.Open, FileAccess.Write, token).ConfigureAwait(false);
+        input.Seek(offset, SeekOrigin.Begin);
+        output.Seek(offset, SeekOrigin.Begin);
+        var buffer = new byte[1 << 18];
+        var done = offset;
+        progress?.Report(done);
+        int read;
+        while ((read = await input.ReadAsync(buffer, token).ConfigureAwait(false)) > 0)
+        {
+            await output.WriteAsync(buffer.AsMemory(0, read), token).ConfigureAwait(false);
+            done += read;
+            progress?.Report(done);
+        }
+
+        await output.FlushAsync(token).ConfigureAwait(false);
+    }
+
+    /// <summary>Troca o nome substituindo o destino de uma vez (rename do POSIX); sem essa extensão no servidor, apaga e renomeia.</summary>
+    private async Task ReplaceAsync(string from, string to, CancellationToken token)
+    {
+        try
+        {
+            await Task.Run(() => _client.RenameFile(from, to, isPosix: true), token).ConfigureAwait(false);
+            return;
+        }
+        catch (Exception ex) when (ex is NotSupportedException or SshException && ex is not SftpPermissionDeniedException)
+        {
+            // servidor sem posix-rename: segue pelo caminho comum
+        }
+
+        if (await _client.ExistsAsync(to, token).ConfigureAwait(false))
+        {
+            await _client.DeleteFileAsync(to, token).ConfigureAwait(false);
+        }
+
+        await _client.RenameFileAsync(from, to, token).ConfigureAwait(false);
+    }
+
+    /// <summary>Data de modificação de um arquivo ou pasta (horário local, como em <see cref="RemoteEntry.Modified"/>).</summary>
+    public Task SetModifiedAsync(string path, DateTime modified, CancellationToken ct) =>
+        RunAsync(ct, token => Task.Run(() =>
+        {
+            _client.SetLastWriteTime(path, modified);
+            return true;
+        }, token));
+
+    /// <summary>Permissões no formato do chmod (755, 644) a partir dos atributos.</summary>
+    private static short PermissionDigits(SftpFileAttributes a)
+    {
+        static int Digit(bool r, bool w, bool x) => (r ? 4 : 0) + (w ? 2 : 0) + (x ? 1 : 0);
+        return (short)(Digit(a.OwnerCanRead, a.OwnerCanWrite, a.OwnerCanExecute) * 100 +
+                       Digit(a.GroupCanRead, a.GroupCanWrite, a.GroupCanExecute) * 10 +
+                       Digit(a.OthersCanRead, a.OthersCanWrite, a.OthersCanExecute));
+    }
+
     public Task CreateDirectoryAsync(string path, CancellationToken ct) =>
         RunAsync(ct, async token =>
         {

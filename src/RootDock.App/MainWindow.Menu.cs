@@ -72,7 +72,7 @@ public partial class MainWindow
         yield return shells;
         yield return new Separator();
 
-        yield return Command("Arquivos do servidor (lado a lado)", OpenActiveServerFiles, enabled: CanOpenActiveServerFiles);
+        yield return Command("Arquivos: Computador ↔ Servidor", OpenActiveServerFiles, enabled: CanOpenActiveServerFiles);
         var save = new MenuItem { Header = "Salvar o conteúdo do terminal", IsEnabled = ActiveTerminal is not null };
         save.Items.Add(Command("Como texto (.txt)", () => PageCommand("export", "txt")));
         save.Items.Add(Command("Como HTML (com cores)", () => PageCommand("export", "html")));
@@ -179,6 +179,9 @@ public partial class MainWindow
         }
 
         yield return new Separator();
+        yield return Command("Transferir entre servidores (Servidor ↔ Servidor)...", () => OpenServerTransfer(
+            _workspace.ActiveSession is { IsSsh: true } active ? active.Entry : null,
+            _workspace.ActiveSession is { IsSsh: true, Files: { } files } ? files.CurrentPath : null));
         yield return Command("Ferramentas de rede (ping, DNS, portas, SSL...)", () => OpenNetworkTools());
         yield return Command("Histórico de comandos...", OpenHistory, "Ctrl+Shift+H");
         yield return Command("Gravações de terminal...", () => RecordingsWindow.ShowFor(this, _workspace.RecordingsDirectory!, _workspace));
@@ -210,6 +213,10 @@ public partial class MainWindow
 
     private bool CanOpenActiveServerFiles =>
         _workspace.ActiveSession is { IsSsh: true, Files: not null } || _rdp.Describe(_workspace.ActivePaneId) is not null;
+
+    /// <summary>Transferência entre dois servidores; <paramref name="first"/> já entra na coluna da esquerda.</summary>
+    private void OpenServerTransfer(Core.Sessions.SessionEntry? first, string? path) =>
+        ServerTransferWindow.ShowFor(this, _sessions.Document.Sessions, _serverLinks, _transfers, first, path);
 
     /// <summary>Gerenciador em duas colunas do servidor ativo (SFTP do terminal SSH ou SMB da Área de Trabalho Remota).</summary>
     private void OpenActiveServerFiles()

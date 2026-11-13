@@ -82,7 +82,10 @@ public sealed partial class TransferItem : ObservableObject
 
     public bool IsUpload { get; }
 
-    public string DirectionGlyph => IsUpload ? "↑" : "↓";
+    /// <summary>Símbolo próprio (ex.: "⇄" entre servidores); null = seta de envio ou download.</summary>
+    public string? Glyph { get; init; }
+
+    public string DirectionGlyph => Glyph ?? (IsUpload ? "↑" : "↓");
 
     [ObservableProperty] private long _totalBytes;
     [ObservableProperty] private double _percent;
@@ -207,9 +210,9 @@ public sealed partial class TransferQueue : ObservableObject
     public event Action<TransferItem>? Completed;
 
     /// <summary>Enfileira o trabalho. <paramref name="work"/> informa o progresso via <see cref="TransferItem.SetDone"/>.</summary>
-    public TransferItem Enqueue(string name, bool upload, long totalBytes, Func<TransferItem, Task> work, string? server = null)
+    public TransferItem Enqueue(string name, bool upload, long totalBytes, Func<TransferItem, Task> work, string? server = null, string? glyph = null)
     {
-        var item = new TransferItem(name, upload, totalBytes, server) { Work = work, ResumeHandler = Resume };
+        var item = new TransferItem(name, upload, totalBytes, server) { Work = work, ResumeHandler = Resume, Glyph = glyph };
         Items.Insert(0, item);
         HasItems = true;
         _timer.Start();
