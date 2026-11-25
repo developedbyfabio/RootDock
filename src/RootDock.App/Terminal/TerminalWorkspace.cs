@@ -76,6 +76,9 @@ public sealed class TerminalWorkspace
     /// <summary>Botão/atalho da biblioteca de comandos (canto superior direito do terminal).</summary>
     public event Action? CommandsToggleRequested;
 
+    /// <summary>Botão ou atalho do assistente (Ctrl+Shift+A) na página dos terminais.</summary>
+    public event Action? AssistantToggleRequested;
+
     public TerminalSession? ActiveSession { get; private set; }
 
     /// <summary>Painel ativo na tela (terminal, editor, RDP, VNC...), ou null sem abas.</summary>
@@ -318,6 +321,9 @@ public sealed class TerminalWorkspace
 
     /// <summary>Mostra no botão da biblioteca se o painel está aberto.</summary>
     public void SetCommandsPanelState(bool open) => Post(JsonSerializer.Serialize(new { type = "commandsPanel", open }));
+
+    /// <summary>Mostra no botão do assistente se o painel está aberto.</summary>
+    public void SetAssistantPanelState(bool open) => Post(JsonSerializer.Serialize(new { type = "assistantPanel", open }));
 
     /// <summary>Coloca texto no prompt do terminal sem executar (respeita o modo de colagem do shell).</summary>
     public void PasteInto(TerminalSession session, string text) =>
@@ -803,6 +809,10 @@ public sealed class TerminalWorkspace
 
             case "toggleCommands":
                 CommandsToggleRequested?.Invoke();
+                break;
+
+            case "toggleAssistant":
+                AssistantToggleRequested?.Invoke();
                 break;
 
             case "fontSize":

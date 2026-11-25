@@ -40,6 +40,9 @@ public sealed class AppSettings
     /// <summary>Sistema dos comandos do painel: "auto" (segue o terminal em foco) ou uma família fixa (debian, rhel, suse, windows).</summary>
     public string CommandsOs { get; set; } = "auto";
 
+    /// <summary>Assistente (chat de IA com acesso ao terminal e aos arquivos da sessão ativa).</summary>
+    public AssistantSettings Assistant { get; set; } = new();
+
     /// <summary>Colunas do painel de arquivos: larguras, escondidas e ordem.</summary>
     public Sftp.FileColumnSettings FilesColumns { get; set; } = new();
 
@@ -216,4 +219,26 @@ public sealed class SettingsStore
         {
         }
     }
+}
+
+public sealed class AssistantSettings
+{
+    public bool PanelOpen { get; set; }
+
+    public double PanelWidth { get; set; } = 460;
+
+    /// <summary>"claude-code" (conta Claude), "anthropic", "gemini", "openai" ou "custom".</summary>
+    public string Provider { get; set; } = "claude-code";
+
+    /// <summary>"ask" (pergunta tudo) ou "auto" (só o destrutivo pede confirmação).</summary>
+    public string Mode { get; set; } = "ask";
+
+    /// <summary>Os comandos do assistente são digitados no terminal visível (em vez de um canal à parte).</summary>
+    public bool ShowInTerminal { get; set; }
+
+    /// <summary>Modelo escolhido por provedor (vazio = o padrão do provedor).</summary>
+    public Dictionary<string, string> Models { get; set; } = [];
+
+    /// <summary>Endereço do provedor "custom" (compatível com OpenAI: Groq, OpenRouter, Ollama...).</summary>
+    public string CustomBaseUrl { get; set; } = "";
 }

@@ -31,6 +31,7 @@ public partial class MainWindow
 
         SaveSettings();
         _workspace.Send(AppThemes.PageMessage(theme));
+        AssistantView.SetTheme(AppThemes.PageMessage(theme));
         _workspace.Send(TerminalThemes.Message(_settings.Terminal, _settings.FontSize));
         FilesView.RefreshIcons();
         Notify($"Tema: {theme.Name}", false);

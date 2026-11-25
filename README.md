@@ -191,6 +191,17 @@ O ícone do programa vem de `icone.png` (raiz). Ao trocá-lo, gere de novo `src/
 - Clique para ver detalhes: sistema, IPs, carga, swap, todos os discos e os processos que mais usam CPU.
 - Usa um canal da própria conexão do terminal (sem nova autenticação) e só lê `/proc`.
 
+### Assistente (IA na sessão SSH, Ctrl+Shift+A)
+
+- Painel de chat à direita, com uma conversa por aba SSH. A IA age no servidor daquela aba: roda comandos, lê o terminal, lê, cria e edita arquivos (SFTP) e busca no código.
+- Provedores: **Conta Claude** (usa o Claude Code oficial instalado na máquina, com o login dele; o RootDock não vê a credencial) ou **chave de API** (Claude, Gemini, OpenAI ou qualquer serviço compatível com OpenAI). As chaves ficam no Gerenciador de Credenciais do Windows.
+- Dois modos: **Perguntar tudo** (cada comando, alteração ou página aberta pede confirmação) e **Automático** (roda sozinho; só os comandos de banco e de git que apagam dados ou histórico pedem um clique).
+- **No terminal** (opcional): os comandos da IA são digitados no terminal aberto, e a saída aparece ao vivo. Desligado, rodam num canal próprio da mesma conexão.
+- Lista de tarefas do trabalho em andamento, imagens na mensagem (Ctrl+V cola um print), busca na web e leitura de páginas.
+- **Desfazer**: cada resposta que mexe em arquivos mostra o que foi criado e editado, com um botão que devolve os arquivos ao estado anterior (não cobre o que foi feito por comando de shell).
+- Histórico de conversas por servidor (reabrir, buscar, apagar para a lixeira) e anotações permanentes por servidor, que entram em toda conversa nova; também lê `CLAUDE.md`/`AGENTS.md` da pasta do terminal.
+- Dados em `assistant\` na pasta de dados: `history` (conversas), `memory` (anotações) e `checkpoints` (cópias dos arquivos para o desfazer, sem criptografia).
+
 ### Editor de arquivos (estilo VS Code)
 
 - Botão direito num arquivo do painel de arquivos → **Editar no RootDock** (ou dois cliques). Abre numa aba, com o editor do VS Code (Monaco): destaque de sintaxe para PHP, Python, JavaScript/TypeScript, JSON, YAML, SQL, Shell, INI/.env/systemd, XML/HTML/CSS, Markdown, Dockerfile, Go, Java, C#, Ruby, Perl, PowerShell, Nginx, Apache e logs (ERROR/WARN coloridos). A linguagem é reconhecida pelo nome, pelo caminho (`/etc/nginx`, `apache2`) e pelo conteúdo.

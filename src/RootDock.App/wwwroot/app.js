@@ -1360,14 +1360,17 @@ function wireLayoutMenu() {
     const n = activeTab ? activeTab.panes().length : 0;
     const others = activeTab ? tabs.length - 1 : 0;
     for (const name of ['grid', 'cols', 'rows', 'separate']) item(name).disabled = n < 2;
+    for (const name of ['split-v', 'split-h']) item(name).disabled = n < 1;
     item('gather').disabled = others < 1;
     item('gather').querySelector('.hint').textContent = others < 1
       ? 'abra outra sessão para juntar'
       : `traz ${others === 1 ? 'a outra aba' : `as outras ${others} abas`} para esta, em grade`;
     const r = button.getBoundingClientRect();
     menu.style.top = r.bottom + 4 + 'px';
-    menu.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+    menu.style.maxWidth = (window.innerWidth - 16) + 'px';
     menu.hidden = false;
+    // Área estreita (painéis laterais abertos): o menu encosta na esquerda em vez de sair da tela.
+    menu.style.right = Math.max(8, Math.min(window.innerWidth - r.right, window.innerWidth - menu.offsetWidth - 8)) + 'px';
     button.classList.add('active');
     document.addEventListener('mousedown', onOutside, true);
     document.addEventListener('keydown', onKey, true);
@@ -1378,6 +1381,8 @@ function wireLayoutMenu() {
     close();
     const tab = activeTab;
     switch (choice.dataset.layout) {
+      case 'split-v': splitActive('v'); break;
+      case 'split-h': splitActive('h'); break;
       case 'gather': gatherTabs(tab); break;
       case 'separate': separateTab(tab); break;
       default: arrangeTab(tab, choice.dataset.layout);
@@ -1561,6 +1566,7 @@ function handleTerminalKey(e, pane) {
       case 'k': send({ type: 'command', name: 'quickConnect' }); return done();
       case 'h': send({ type: 'command', name: 'history' }); return done();
       case 'l': send({ type: 'toggleCommands' }); return done();
+      case 'a': send({ type: 'toggleAssistant' }); return done();
       case 'Tab': cycleTab(-1); return done();
       default: break;
     }
@@ -1603,6 +1609,7 @@ document.addEventListener('keydown', (e) => {
     if (key === 't') { e.preventDefault(); send({ type: 'newLocal' }); }
     else if (key === 'k') { e.preventDefault(); send({ type: 'command', name: 'quickConnect' }); }
     else if (key === 'l') { e.preventDefault(); send({ type: 'toggleCommands' }); }
+    else if (key === 'a') { e.preventDefault(); send({ type: 'toggleAssistant' }); }
     else if (key === 'h') { e.preventDefault(); send({ type: 'command', name: 'history' }); }
   }
 });
@@ -1714,6 +1721,9 @@ function onHostMessage(raw) {
     case 'commandsPanel':
       document.querySelector('[data-action="commands"]').classList.toggle('active', !!msg.open);
       break;
+    case 'assistantPanel':
+      document.querySelector('[data-action="assistant"]').classList.toggle('active', !!msg.open);
+      break;
     case 'menu':
       runMenuAction(msg.action, msg.arg);
       break;
@@ -1728,10 +1738,9 @@ if (host) {
 }
 
 $('new-tab').addEventListener('click', () => send({ type: 'newLocal' }));
-document.querySelector('[data-action="split-v"]').addEventListener('click', () => splitActive('v'));
-document.querySelector('[data-action="split-h"]').addEventListener('click', () => splitActive('h'));
 document.querySelector('[data-action="search"]').addEventListener('click', openSearch);
 document.querySelector('[data-action="commands"]').addEventListener('click', () => send({ type: 'toggleCommands' }));
+document.querySelector('[data-action="assistant"]').addEventListener('click', () => send({ type: 'toggleAssistant' }));
 new ResizeObserver(() => shownTab && shownTab.layout()).observe(stage);
 wireSearch();
 wireDragAndDrop();

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'">
+  <title>Assistente</title>
+  <link rel="stylesheet" href="assistant.css">
+</head>
+<body>
+  <header id="head">
+    <svg class="logo" viewBox="0 0 16 16"><path d="M8 1.5l1.6 3.9 3.9 1.6-3.9 1.6L8 12.5 6.4 8.6 2.5 7l3.9-1.6z"/><path d="M12.6 10.8l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6z"/></svg>
+    <div class="titles">
+      <div class="title">Assistente</div>
+      <div id="target" class="target"></div>
+    </div>
+    <button id="new-chat" class="icon-btn" title="Nova conversa" aria-label="Nova conversa">
+      <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>
+    </button>
+    <button id="open-history" class="icon-btn" title="Histórico: conversas anteriores deste servidor" aria-label="Histórico de conversas">
+      <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg>
+    </button>
+    <button id="open-settings" class="icon-btn" title="Configurações do assistente: provedor, modelo e chave" aria-label="Configurações do assistente">
+      <svg viewBox="0 0 16 16"><path d="M2 4.5h6.5M12.5 4.5H14M2 11.5h1.5M7.5 11.5H14"/><circle cx="10.5" cy="4.5" r="2"/><circle cx="5.5" cy="11.5" r="2"/></svg>
+    </button>
+    <button id="close" class="icon-btn" title="Fechar o assistente" aria-label="Fechar o assistente">
+      <svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+    </button>
+  </header>
+
+  <main id="chat">
+    <section id="welcome">
+      <h1>Como posso ajudar neste servidor?</h1>
+      <p>Cada aba SSH tem a sua conversa. Nesta, eu ajo no servidor desta aba: rodo comandos, leio o que está no terminal e edito arquivos.</p>
+      <div class="examples">
+        <button class="example">Por que este servidor está lento? Investigue CPU, memória e disco.</button>
+        <button class="example">Veja o erro que acabou de aparecer no terminal e me diga a causa.</button>
+        <button class="example">Quais serviços falharam desde o último boot?</button>
+      </div>
+    </section>
+    <div id="messages"></div>
+  </main>
+
+  <!-- Lista de tarefas do trabalho em andamento (a IA monta e atualiza) -->
+  <section id="tasks" hidden>
+    <button id="tasks-head" title="Mostrar ou recolher a lista de tarefas">
+      <svg viewBox="0 0 16 16"><path d="M2.5 4.5l1.5 1.5 2.5-3M9 4.5h5M2.5 11l1.5 1.5 2.5-3M9 11h5"/></svg>
+      <span id="tasks-title">Tarefas</span>
+      <span id="tasks-count"></span>
+    </button>
+    <ul id="tasks-list"></ul>
+  </section>
+
+  <footer id="foot">
+    <div id="banner" hidden></div>
+    <div class="composer" id="composer">
+      <div id="attachments" hidden></div>
+      <textarea id="input" rows="1" placeholder="Peça algo sobre o servidor em foco (Ctrl+V cola um print)" spellcheck="false"></textarea>
+      <div class="composer-row">
+        <select id="mode" title="Perguntar tudo: cada comando e alteração pede a sua confirmação. Automático: roda sozinho; só comandos destrutivos pedem confirmação.">
+          <option value="ask">Perguntar tudo</option>
+          <option value="auto">Automático</option>
+        </select>
+        <button id="show-terminal" class="toggle" aria-pressed="false" title="Mostrar no terminal: os comandos da IA são digitados no terminal aberto, e você acompanha a saída ao vivo. Desligado, rodam por fora, num canal próprio.">
+          <svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="M4.5 6l2.2 2-2.2 2M8.5 10.5h3"/></svg>
+          <span>No terminal</span>
+        </button>
+        <button id="attach" class="toggle icon-only" title="Anexar imagem (ou cole um print com Ctrl+V, ou arraste o arquivo para cá)" aria-label="Anexar imagem">
+          <svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><circle cx="5.5" cy="6" r="1.2"/><path d="M2 12l3.5-3.5 2.5 2.5 2.5-3 3.5 4"/></svg>
+        </button>
+        <input id="attach-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
+        <button id="provider" class="link-btn" title="Trocar provedor ou modelo"></button>
+        <div class="spacer"></div>
+        <button id="send" class="send" title="Enviar (Enter)" aria-label="Enviar">
+          <svg viewBox="0 0 16 16"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"/></svg>
+        </button>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Histórico: caixinha suspensa embaixo do botão do relógio -->
+  <section id="history" role="dialog" aria-label="Conversas deste servidor" hidden>
+    <div class="history-search">
+      <svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><line x1="10.3" y1="10.3" x2="14" y2="14"/></svg>
+      <input id="history-filter" type="text" placeholder="Buscar conversas..." spellcheck="false">
+    </div>
+    <div id="history-list"></div>
+  </section>
+
+  <section id="settings" hidden>
+    <header>
+      <div class="title">Configurações do assistente</div>
+      <button id="settings-close" class="icon-btn" title="Voltar à conversa" aria-label="Voltar à conversa">
+        <svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+    </header>
+    <div id="settings-body">
+      <div id="memory" class="provider">
+        <div class="memory-head">
+          <div class="provider-name" id="memory-title">Anotações deste servidor</div>
+          <div class="provider-hint">O que a IA deve saber sempre que conversar sobre este servidor: onde ficam os projetos, como rodar e publicar, convenções, cuidados. Entram em toda conversa nova daqui; a IA também acrescenta sozinha quando descobre algo útil. Não coloque senhas.</div>
+        </div>
+        <textarea id="memory-text" rows="6" spellcheck="false" placeholder="Ex.: O sistema fica em /srv/www/hub (Laravel 11). Deploy: git pull, composer install, php artisan migrate. Sempre faça backup do .env antes de mexer."></textarea>
+        <div class="buttons"><button id="memory-save" class="btn primary">Salvar anotações</button><span id="memory-state" class="status"></span></div>
+      </div>
+      <div id="providers"></div>
+    </div>
+    <p class="fine">As chaves ficam no Gerenciador de Credenciais do Windows, nunca em arquivo. O login da conta Claude é feito pelo próprio Claude Code: o RootDock não vê a sua senha.</p>
+  </section>
+
+  <script src="assistant.js"></script>
+</body>
+</html>

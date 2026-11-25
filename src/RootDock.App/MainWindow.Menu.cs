@@ -104,6 +104,7 @@ public partial class MainWindow
         yield return Toggle("Sessões", SessionsTab.IsChecked == true, () => SessionsTab.IsChecked = true);
         yield return Toggle("Arquivos", FilesTab.IsChecked == true, () => FilesTab.IsChecked = true);
         yield return Toggle("Biblioteca de comandos", IsCommandsPanelOpen, () => SetCommandsPanel(!IsCommandsPanelOpen), "Ctrl+Shift+L");
+        yield return Toggle("Assistente (IA)", IsAssistantPanelOpen, () => SetAssistantPanel(!IsAssistantPanelOpen), "Ctrl+Shift+A");
         yield return new Separator();
 
         var hasPane = _workspace.ActivePaneId is not null;

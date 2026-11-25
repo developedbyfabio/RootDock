@@ -8,6 +8,7 @@
     <PackageReference Include="BouncyCastle.Cryptography" />
     <PackageReference Include="System.IO.Ports" />
     <PackageReference Include="FluentFTP" />
+    <PackageReference Include="Anthropic" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="RootDock.Core.Tests" />

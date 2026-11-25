@@ -124,6 +124,8 @@
                 <ColumnDefinition Width="*" MinWidth="320" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition x:Name="CommandsColumn" Width="0" MaxWidth="640" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition x:Name="AssistantColumn" Width="0" />
             </Grid.ColumnDefinitions>
 
             <!-- Barra lateral: Sessões | Arquivos -->
@@ -407,6 +409,19 @@
             <GridSplitter Grid.Column="3" x:Name="CommandsSplitter" Width="4" HorizontalAlignment="Stretch" Background="{DynamicResource RdBorder}"
                           ResizeBehavior="PreviousAndNext" ResizeDirection="Columns" Visibility="Collapsed" />
             <views:CommandsPanel Grid.Column="4" x:Name="CommandsView" Visibility="Collapsed" />
+
+            <!-- Assistente: chat de IA que age na sessão SSH em foco (lado direito, recolhível) -->
+            <!-- Arrastar muda a largura do assistente tirando do terminal (um GridSplitter mexeria na coluna dos comandos, ao lado) -->
+            <Thumb Grid.Column="5" x:Name="AssistantSplitter" Width="5" Cursor="SizeWE" Visibility="Collapsed"
+                   DragDelta="OnAssistantSplitterDrag" DragCompleted="OnAssistantSplitterDone" MouseDoubleClick="OnAssistantSplitterReset"
+                   ToolTip="Arraste para alargar ou estreitar o assistente (dois cliques: largura padrão)">
+                <Thumb.Template>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border Background="{DynamicResource RdBorder}" />
+                    </ControlTemplate>
+                </Thumb.Template>
+            </Thumb>
+            <views:AssistantPanel Grid.Column="6" x:Name="AssistantView" Visibility="Collapsed" />
         </Grid>
 
         <!-- Barra de status -->

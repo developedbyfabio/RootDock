@@ -10,6 +10,8 @@
     <PackageVersion Include="System.IO.Ports" Version="10.0.0" />
     <!-- FTP e FTPS (gerenciador de arquivos) -->
     <PackageVersion Include="FluentFTP" Version="55.1.0" />
+    <!-- SDK oficial da Anthropic: assistente com chave de API do Claude -->
+    <PackageVersion Include="Anthropic" Version="13.13.0" />
     <PackageVersion Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageVersion Include="WPF-UI" Version="4.3.0" />

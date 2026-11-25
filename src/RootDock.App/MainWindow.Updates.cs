@@ -112,6 +112,7 @@ public partial class MainWindow
         _workspace.Send(AppThemes.PageMessage(AppThemes.Get(_settings.AppTheme)));
         _workspace.Send(TerminalThemes.Message(_settings.Terminal, _settings.FontSize));
         _workspace.SetCommandsPanelState(_settings.CommandsPanelOpen);
+        _workspace.SetAssistantPanelState(IsAssistantPanelOpen);
         var editors = _workspace.Editors?.ForgetAll() ?? 0;
         _rdp.CloseAll();
         _vnc.CloseAll();

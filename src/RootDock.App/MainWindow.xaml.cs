@@ -147,6 +147,7 @@ public partial class MainWindow : FluentWindow
         InitTreeOrganization();
         GroupingBox.SelectedIndex = Grouping switch { TreeGrouping.Company => 1, TreeGrouping.Environment => 2, TreeGrouping.Tags => 3, _ => 0 };
         InitCommands();
+        InitAssistant();
         RestorePlacement();
         InitUpdates();
         StartupTrace.Mark("janela criada");
@@ -980,6 +981,19 @@ public partial class MainWindow : FluentWindow
         QuickConnectBox.SelectAll();
     }
 
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetFocus();
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool IsChild(IntPtr parent, IntPtr child);
+
+    /// <summary>O foco do Windows está dentro deste controle (vale mesmo quando o WPF não ficou sabendo)?</summary>
+    private static bool HasNativeFocus(System.Windows.Interop.HwndHost host)
+    {
+        var focused = GetFocus();
+        return focused != IntPtr.Zero && host.Handle != IntPtr.Zero && (focused == host.Handle || IsChild(host.Handle, focused));
+    }
+
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
         var mods = Keyboard.Modifiers;
@@ -1000,9 +1014,17 @@ public partial class MainWindow : FluentWindow
                 e.Handled = true;
                 SetCommandsPanel(!IsCommandsPanelOpen);
             }
+            else if (e.Key == Key.A && !WebView.IsKeyboardFocusWithin)
+            {
+                e.Handled = true;
+                SetAssistantPanel(!IsAssistantPanelOpen);
+            }
         }
-        else if (mods == ModifierKeys.Control && e.Key == Key.F && !WebView.IsKeyboardFocusWithin)
+        else if (mods == ModifierKeys.Control && e.Key == Key.F && !WebView.IsKeyboardFocusWithin &&
+                 e.OriginalSource is not Microsoft.Web.WebView2.Wpf.WebView2 && !HasNativeFocus(WebView))
         {
+            // A tecla que vem de dentro de uma página (terminal, editor de arquivos, assistente) é da página:
+            // depois de um clique no editor o foco do Windows está lá, mas o do WPF pode ter ficado para trás.
             // No terminal/editor o Ctrl+F é deles (bash: avança um caractere; vim/less: página).
             e.Handled = true;
             FocusSessionSearch(); // troca para a aba Sessões se estiver em Arquivos
@@ -1248,6 +1270,8 @@ public partial class MainWindow : FluentWindow
         _settings.SidebarWidth = SidebarColumn.ActualWidth;
         RememberWorkspace();
         RememberCommandsWidth();
+        RememberAssistantWidth();
+        _assistant?.Dispose();
         SaveSettings();
         _editor.Dispose();
         _rdp.CloseAll();

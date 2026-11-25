@@ -51,6 +51,11 @@ public sealed class TerminalSession : IDisposable, ITerminalPrompter
     /// <summary>Texto guardado acima do qual uma conexão sem perda (Telnet, serial, local) para de ler.</summary>
     private const int PendingCap = 2 * 1024 * 1024;
 
+    /// <summary>Fim da saída bruta guardado para <see cref="ReadRecent"/>.</summary>
+    private const int RecentChars = 96 * 1024;
+
+    private readonly StringBuilder _recent = new();
+
     private long _inflight;
     private volatile bool _paused;
     private long _droppedChars;
@@ -114,6 +119,9 @@ public sealed class TerminalSession : IDisposable, ITerminalPrompter
 
     /// <summary>Programa em primeiro plano no terminal, informado pelo monitor (null = desconhecido).</summary>
     public string? ForegroundProcess { get; private set; }
+
+    /// <summary>Pasta atual do shell deste terminal, informada pelo monitor (null = desconhecida).</summary>
+    public string? TerminalDirectory { get; private set; }
 
     /// <summary>Tamanho informado pela tela. A primeira medida dispara a conexão.</summary>
     /// <summary>Gravação em andamento (asciicast), ou null.</summary>
@@ -203,10 +211,25 @@ public sealed class TerminalSession : IDisposable, ITerminalPrompter
     /// <summary>Digita pelo terminal visual (o comando fica destacado no histórico).</summary>
     public void Type(string text) => _workspace.TypeInto(this, text);
 
+    /// <summary>O fim do que apareceu neste terminal, como texto (sem cores), para o assistente ler.</summary>
+    public string ReadRecent(int lines)
+    {
+        string raw;
+        lock (_gate)
+        {
+            raw = _recent.ToString();
+        }
+
+        return Core.Assistant.TerminalText.Tail(raw, lines);
+    }
+
     /// <summary>Saída do servidor já decodificada, na thread de leitura (usada pelas macros).</summary>
     public OutputObserver? OutputObserved { get; set; }
 
     public delegate void OutputObserver(ReadOnlySpan<char> text);
+
+    /// <summary>Mesma saída, para quem só acompanha (vários ao mesmo tempo, sem disputar com as macros).</summary>
+    public event OutputObserver? OutputTapped;
 
     /// <summary>Dados binários do xterm (relatórios de mouse antigos): cada caractere é um byte.</summary>
     public void SendBinary(string data)
@@ -411,9 +434,16 @@ public sealed class TerminalSession : IDisposable, ITerminalPrompter
         {
             var count = _decoder.GetChars(bytes, chars, flush: false);
             OutputObserved?.Invoke(chars.AsSpan(0, count)); // macro em andamento (na thread de leitura)
+            OutputTapped?.Invoke(chars.AsSpan(0, count)); // assistente acompanhando os comandos dele
             lock (_gate)
             {
                 _pending.Append(chars, 0, count);
+                _recent.Append(chars, 0, count);
+                if (_recent.Length > RecentChars * 2)
+                {
+                    _recent.Remove(0, _recent.Length - RecentChars);
+                }
+
                 if (IsSsh)
                 {
                     if (_pending.Length > OverflowChars)
@@ -534,6 +564,7 @@ public sealed class TerminalSession : IDisposable, ITerminalPrompter
             ServerStatus?.Update(snapshot);
             Files?.OnTerminalDirectory(snapshot.TerminalDirectory);
             ForegroundProcess = snapshot.TerminalForeground;
+            TerminalDirectory = snapshot.TerminalDirectory ?? TerminalDirectory;
         });
         monitor.Stopped += reason => _workspace.Dispatcher.BeginInvoke(() =>
         {
