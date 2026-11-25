@@ -329,6 +329,7 @@
     el.querySelector('.tool-summary').title = msg.summary || '';
     el.querySelector('.tool-head').addEventListener('click', () => el.classList.toggle('open'));
     el.dataset.start = msg.start || Date.now();
+    el.dataset.name = msg.name;
     tools.set(msg.id, el);
     add(el);
   }
@@ -862,6 +863,97 @@
 
   // ---------- Estado ----------
 
+  // ---------- Sinal de atividade ----------
+  // Enquanto a resposta está em andamento, a última linha da conversa diz o que está acontecendo:
+  // pensando (com um verbo que vai trocando), executando uma ferramenta, ou esperando um clique.
+  // O tempo corre junto, para ficar claro que não travou.
+
+  const working = $('working');
+  const THINKING = [
+    'Pensando', 'Raciocinando', 'Analisando', 'Investigando', 'Matutando', 'Calculando', 'Masterizando',
+    'Alucinando', 'Maquinando', 'Destrinchando', 'Farejando', 'Conferindo', 'Arquitetando',
+    'Decifrando', 'Elucubrando', 'Processando', 'Ruminando', 'Tramando', 'Lapidando',
+  ];
+  const TOOL_VERBS = {
+    run_command: 'Executando o comando',
+    type_in_terminal: 'Digitando no terminal',
+    read_terminal: 'Lendo o terminal',
+    read_file: 'Lendo o arquivo',
+    write_file: 'Gravando o arquivo',
+    edit_file: 'Editando o arquivo',
+    list_directory: 'Listando a pasta',
+    search_files: 'Procurando no código',
+    find_files: 'Procurando arquivos',
+    remember: 'Anotando',
+    web_search: 'Pesquisando na web',
+    web_fetch: 'Abrindo a página',
+  };
+  const MARKS = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
+  const calm = window.matchMedia('(prefers-reduced-motion: reduce)');
+  let workingSince = 0;
+  let workingTimer = 0;
+  let workingTick = 0;
+  let verb = THINKING[0];
+  let verbAt = 0;
+
+  function elapsed(ms) {
+    const seconds = Math.max(0, Math.floor(ms / 1000));
+    if (seconds < 60) return seconds + ' s';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return minutes + ' min ' + (seconds % 60) + ' s';
+    return Math.floor(minutes / 60) + ' h ' + (minutes % 60) + ' min';
+  }
+
+  function nextVerb() {
+    let pick = verb;
+    while (pick === verb) pick = THINKING[Math.floor(Math.random() * THINKING.length)];
+    verb = pick;
+    verbAt = Date.now();
+  }
+
+  function updateWorking() {
+    const now = Date.now();
+    let text, waiting = false;
+    if (messages.querySelector('.confirm')) {
+      text = 'Aguardando a sua confirmação';
+      waiting = true;
+    } else {
+      const running = [...tools.values()].filter((el) => el.classList.contains('running')).pop();
+      if (running) {
+        text = TOOL_VERBS[running.dataset.name] || 'Trabalhando';
+      } else {
+        if (now - verbAt > 3500) nextVerb(); // só troca enquanto pensa: verbo de ferramenta não pisca
+        text = verb;
+      }
+    }
+
+    const stick = nearBottom();
+    if ($('working-verb').textContent !== text) $('working-verb').textContent = text;
+    working.classList.toggle('waiting', waiting);
+    $('working-dots').hidden = waiting;
+    if (!waiting && !calm.matches) $('working-mark').textContent = MARKS[workingTick++ % MARKS.length];
+    const info = waiting ? '' : '(' + elapsed(now - workingSince) + ' · Esc para parar)';
+    if ($('working-info').textContent !== info) $('working-info').textContent = info;
+    if (stick) scrollDown();
+  }
+
+  function setWorking(busy, since) {
+    if (!busy) {
+      if (workingTimer) { clearInterval(workingTimer); workingTimer = 0; }
+      working.hidden = true;
+      return;
+    }
+    // O relógio do aplicativo e o da página são o mesmo computador: "since" vale direto.
+    workingSince = since > 0 ? since : workingSince || Date.now();
+    if (workingTimer) return;
+    nextVerb();
+    const stick = nearBottom();
+    working.hidden = false;
+    updateWorking();
+    if (stick) scrollDown();
+    workingTimer = setInterval(updateWorking, 140);
+  }
+
   function applyState(next) {
     state = next;
     const target = $('target');
@@ -880,6 +972,7 @@
     $('provider').textContent = current ? current.label.replace(/\s*\(.*\)$/, '') + (model ? ' · ' + model : '') : '';
 
     sendBtn.classList.toggle('stop', next.busy);
+    setWorking(next.busy, next.busySince);
     sendBtn.title = next.busy ? 'Parar (Esc)' : 'Enviar (Enter)';
     sendBtn.innerHTML = next.busy
       ? '<svg viewBox="0 0 16 16"><rect x="4.5" y="4.5" width="7" height="7" rx="1" fill="currentColor"/></svg>'

@@ -102,7 +102,11 @@ public sealed class AssistantTools(IAssistantHost host, WebTools? web = null)
             "O comando roda até terminar, demore o que demorar (du, find, backup, build): espere o resultado, não repita nem " +
             "desista. Não há teclado: comandos que esperam resposta (senha, confirmação, editores) ou que nunca terminam " +
             "(top, tail -f, watch) ficariam presos; use opções não interativas (-y, --no-pager, -n), passe timeout_seconds " +
-            "para os que não terminam sozinhos, ou use type_in_terminal.",
+            "para os que não terminam sozinhos, ou use type_in_terminal. " +
+            "Consultas a logs e a pastas grandes devem ser limitadas na origem, para a pessoa não esperar minutos: no journalctl " +
+            "use os filtros dele (-p err, -u serviço, --since \"1 hour ago\", -n 200, -g padrão) em vez de despejar o boot inteiro " +
+            "num grep; em arquivos de log comece por tail -n; em find e du limite a pasta e a profundidade. Só amplie a busca se " +
+            "o recorte não bastar.",
             Schema(new
             {
                 type = "object",

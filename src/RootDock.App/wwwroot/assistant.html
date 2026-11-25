@@ -39,6 +39,12 @@
       </div>
     </section>
     <div id="messages"></div>
+    <!-- Sinal de que a IA está trabalhando (pensando, rodando algo ou esperando a pessoa) -->
+    <div id="working" role="status" aria-live="off" hidden>
+      <span id="working-mark" aria-hidden="true">✻</span>
+      <span id="working-verb">Pensando</span><span id="working-dots" aria-hidden="true">…</span>
+      <span id="working-info"></span>
+    </div>
   </main>
 
   <!-- Lista de tarefas do trabalho em andamento (a IA monta e atualiza) -->

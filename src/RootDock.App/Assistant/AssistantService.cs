@@ -557,6 +557,7 @@ public sealed partial class AssistantService : IDisposable
         {
             type = "state",
             busy = _shown?.Busy == true,
+            busySince = _shown is { Busy: true } working ? working.BusySince : 0,
             mode = _settings.Mode == "auto" ? "auto" : "ask",
             showInTerminal = _settings.ShowInTerminal,
             provider = Provider.Id,
@@ -745,7 +746,22 @@ public sealed partial class AssistantService : IDisposable
         /// <summary>Identificador desta conversa no histórico (muda ao começar uma nova).</summary>
         public string Id { get; private set; } = Guid.NewGuid().ToString("N");
 
-        public bool Busy { get; private set; }
+        public bool Busy
+        {
+            get;
+            private set
+            {
+                if (value && !field)
+                {
+                    BusySince = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                }
+
+                field = value;
+            }
+        }
+
+        /// <summary>Quando a resposta em andamento começou (para a tela mostrar há quanto tempo trabalha).</summary>
+        public long BusySince { get; private set; }
 
         public static string ServerKey(TerminalSession session) => $"{session.Entry.Host}:{session.Entry.Port}";
 
@@ -1269,7 +1285,7 @@ public sealed partial class AssistantService : IDisposable
             _dispatcher = dispatcher;
             _showInTerminal = showInTerminal;
             _note = note;
-            _shell = new VisibleShell(text => dispatcher.Invoke(() => session.Type(text)));
+            _shell = new VisibleShell(text => dispatcher.Invoke(() => session.Type(text))) { QuietPagers = true };
             session.OutputTapped += _shell.Feed;
         }
 

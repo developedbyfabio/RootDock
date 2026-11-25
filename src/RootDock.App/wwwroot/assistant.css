@@ -441,3 +441,24 @@ svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width:
 
 /* O fim ainda em andamento de uma resposta: não conta como bloco à parte */
 .md-tail { display: contents; }
+
+/* ---------- Sinal de atividade (a IA está pensando, executando ou esperando) ---------- */
+#working { display: flex; align-items: baseline; gap: 6px; margin: 2px 0 4px; color: var(--text-dim); }
+#working[hidden] { display: none; }
+#working-mark { flex: none; width: 14px; color: var(--accent); text-align: center; font-size: 14px; line-height: 1; }
+#working-verb {
+  color: transparent;
+  background: linear-gradient(90deg, var(--text-dim) 0%, var(--text-dim) 40%, var(--text) 50%, var(--text-dim) 60%, var(--text-dim) 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: working-shine 2.2s linear infinite;
+}
+#working-dots { margin-left: -6px; }
+#working-info { font-size: 12px; opacity: .8; }
+#working.waiting #working-mark { color: var(--staging); }
+#working.waiting #working-verb { animation: none; background: none; color: var(--staging); }
+@keyframes working-shine { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  #working-verb { animation: none; background: none; color: var(--text-dim); }
+}

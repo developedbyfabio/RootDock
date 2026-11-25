@@ -78,6 +78,61 @@ public sealed class VisibleShellTests
     }
 
     [Fact]
+    public async Task Run_StuckInPager_QuitsItAndTellsTheModel()
+    {
+        var typed = new List<string>();
+        var shell = new VisibleShell(typed.Add);
+        shell.Feed(Done(shell, 0));
+        var run = shell.RunAsync("journalctl -b", Timeout.InfiniteTimeSpan, TestContext.Current.CancellationToken);
+        shell.Feed("journalctl -b\r\n" + Start(shell) + "nov 25 erro um\r\nnov 25 erro dois\r\n\u001b[7mlines 1-36\u001b[27m\u001b[K");
+        for (var i = 0; i < 100 && typed.Count < 2; i++)
+        {
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal("q", typed.Last());
+        shell.Feed("\r\u001b[K" + Done(shell, 0));
+        var result = await run;
+        Assert.Contains("erro dois", result.Output);
+        Assert.Contains("paginador", result.Output);
+        Assert.Equal(2, typed.Count); // um "q" só
+    }
+
+    [Fact]
+    public async Task Run_QuietCommand_IsNotTakenForAPager()
+    {
+        var typed = new List<string>();
+        var shell = new VisibleShell(typed.Add);
+        shell.Feed(Done(shell, 0));
+        var run = shell.RunAsync("sleep 3", Timeout.InfiniteTimeSpan, TestContext.Current.CancellationToken);
+        shell.Feed("sleep 3\r\n" + Start(shell) + "Senha:");
+        await Task.Delay(2500, TestContext.Current.CancellationToken);
+        Assert.Single(typed);
+        shell.Feed("\r\n" + Done(shell, 0));
+        Assert.DoesNotContain("paginador", (await run).Output);
+    }
+
+    [Fact]
+    public async Task Run_QuietPagers_PreparesBeforeTyping()
+    {
+        var typed = new List<string>();
+        var shell = new VisibleShell(typed.Add) { QuietPagers = true };
+        shell.Feed(Done(shell, 0));
+        var run = shell.RunAsync("git log", TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Equal("\u0015 __rootdock_quiet\r", typed.Single());
+        shell.Feed(" __rootdock_quiet\r\n" + Start(shell) + "\u001b[1A\r\u001b[2K" + Done(shell, 0) + "root@srv:~# ");
+        for (var i = 0; i < 50 && typed.Count < 2; i++)
+        {
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal("\u0015git log\r", typed.Last());
+        shell.Feed("git log\r\n" + Start(shell) + "commit abc\r\n" + Done(shell, 0));
+        var result = await run;
+        Assert.Equal("commit abc\n", result.Output);
+    }
+
+    [Fact]
     public async Task Run_Cancelled_SendsCtrlC()
     {
         var typed = new List<string>();
@@ -135,7 +190,7 @@ public sealed class VisibleShellTests
             {
                 process.StandardInput.Write(text.Replace("\u0015", "").Replace("\r", "\n"));
                 process.StandardInput.Flush();
-            });
+            }) { QuietPagers = true };
             _ = Task.Run(async () =>
             {
                 var buffer = new char[4096];
@@ -164,6 +219,13 @@ public sealed class VisibleShellTests
                 var second = await shell.RunAsync("pwd; echo $RD_TESTE; echo \"$PROMPT_COMMAND\"", TimeSpan.FromSeconds(20), ct);
                 Assert.Contains("/tmp\nvalor-42", second.Output);
                 Assert.Contains("__rootdock_done; true", second.Output);
+
+                // Os comandos do assistente rodam sem paginador; depois volta a ser como a pessoa deixou.
+                await shell.RunAsync("export PAGER=meu; unset SYSTEMD_PAGER", TimeSpan.FromSeconds(20), ct);
+                var quiet = await shell.RunAsync("echo \"p=$PAGER s=$SYSTEMD_PAGER g=$GIT_PAGER\"", TimeSpan.FromSeconds(20), ct);
+                Assert.Contains("p=cat s=cat g=cat", quiet.Output);
+                var restored = await shell.RunAsync("__rootdock_pagers; echo \"p=${PAGER-nada} s=${SYSTEMD_PAGER-nada}\"", TimeSpan.FromSeconds(20), ct);
+                Assert.Contains("p=meu s=nada", restored.Output);
 
                 // Carregar de novo (outro RootDock, outra conversa) não duplica nada.
                 Assert.True(await shell.ActivateAsync(script.Replace('\\', '/'), TimeSpan.FromSeconds(20), ct));
