@@ -63,8 +63,10 @@ public sealed record AssistantTask(string Title, string Status);
 /// As ferramentas do assistente (terminal e arquivos do servidor) e a execução de cada uma.
 /// O texto devolvido vai para o modelo; erros voltam como texto para ele poder corrigir o rumo.
 /// </summary>
-public sealed class AssistantTools(IAssistantHost host, WebTools? web = null)
+public sealed class AssistantTools(IAssistantHost host, WebTools? web = null, IAssistantMacroBook? macros = null)
 {
+    public const string ListMacros = "list_macros";
+    public const string SaveMacro = "save_macro";
     public const string UpdateTasks = "update_tasks";
     public const string WebSearch = "web_search";
     public const string WebFetch = "web_fetch";
@@ -294,10 +296,64 @@ public sealed class AssistantTools(IAssistantHost host, WebTools? web = null)
                 required = new[] { "url" },
             }),
             ReadOnly: false),
+        new(ListMacros,
+            "Lista as macros que a pessoa já tem no RootDock (id, nome, descrição e passos). Chame antes de save_macro, para " +
+            "não criar uma repetida e para saber o id da que ela quer alterar.",
+            Schema(new { type = "object", properties = new { } }),
+            ReadOnly: true),
+        new(SaveMacro,
+            "Cria (ou altera) uma macro do RootDock. Macro é uma sequência de passos guardada no programa da pessoa, não no " +
+            "servidor: ela aparece no painel Comandos, em \"Minhas macros\", e com um clique o RootDock digita os passos no " +
+            "terminal da aba em foco, como se fosse o teclado, esperando cada comando terminar antes do próximo. Serve para " +
+            "rotinas que ela repete: checagem diária de saúde do servidor, deploy, coleta de logs, limpeza. Use quando ela " +
+            "pedir uma macro ou um procedimento para repetir.\n" +
+            "Como montar: cada passo command é UMA linha de shell (junte com && ou ; se precisar). Não use comandos que " +
+            "ficam abertos ou paginam (top, less, tail -f, vim, journalctl sem --no-pager): a macro espera o prompt voltar. " +
+            "Para pergunta interativa (\"[Y/n]\", \"password:\"), ponha depois do comando um passo wait_for com o texto da " +
+            "pergunta e, em seguida, um passo command com a resposta. wait é uma pausa fixa em segundos. A saída aparece no " +
+            "terminal para a pessoa ler: prefira comandos de saída curta e clara, e use echo para dar título a cada bloco " +
+            "(ex.: echo \"== Disco ==\" && df -h). A macro pode rodar em qualquer servidor: não fixe caminhos, IPs ou nomes " +
+            "que só existem neste, a não ser que ela peça uma macro só para este. Nunca coloque senhas ou tokens. Comandos " +
+            "que alteram ou apagam coisas são aceitos, e o RootDock pede confirmação a cada execução.\n" +
+            "Antes de salvar, rode os comandos aqui com run_command (os que só consultam) para confirmar que existem e " +
+            "funcionam neste sistema; não salve comando que você não testou sem avisar. Para alterar uma macro existente, " +
+            "passe replace_id (de list_macros) e a lista de passos inteira.",
+            Schema(new
+            {
+                type = "object",
+                properties = new
+                {
+                    name = new { type = "string", description = "Nome curto, como aparece no painel. Ex.: Saúde do servidor." },
+                    description = new { type = "string", description = "Uma frase dizendo o que a macro faz." },
+                    steps = new
+                    {
+                        type = "array",
+                        description = "Os passos, na ordem em que serão executados.",
+                        items = new
+                        {
+                            type = "object",
+                            properties = new
+                            {
+                                kind = new { type = "string", @enum = new[] { "command", "wait", "wait_for" }, description = "command: digita a linha e Enter. wait: pausa. wait_for: espera um texto aparecer na saída." },
+                                text = new { type = "string", description = "A linha de comando (command) ou o texto esperado (wait_for)." },
+                                seconds = new { type = "number", description = "Duração da pausa (wait) ou tempo máximo de espera (wait_for, padrão 30)." },
+                            },
+                            required = new[] { "kind" },
+                        },
+                    },
+                    wait_for_prompt = new { type = "boolean", description = "Esperar cada comando terminar antes do próximo (padrão true; quase sempre é o certo)." },
+                    replace_id = new { type = "string", description = "Id da macro existente a substituir. Omita para criar uma nova." },
+                },
+                required = new[] { "name", "steps" },
+            }),
+            ReadOnly: false),
     ];
 
     /// <summary>Ferramentas que agem na internet, e não no servidor da sessão.</summary>
     public static bool IsWeb(string name) => name is WebSearch or WebFetch;
+
+    /// <summary>Ferramentas que mexem nas macros do RootDock (no computador da pessoa), e não no servidor.</summary>
+    public static bool IsMacro(string name) => name is ListMacros or SaveMacro;
 
     public static ToolDefinition? Find(string name) => Definitions.FirstOrDefault(d => d.Name == name);
 
@@ -313,6 +369,8 @@ public sealed class AssistantTools(IAssistantHost host, WebTools? web = null)
         WebSearch => Text(input, "query") ?? "",
         WebFetch => Text(input, "url") ?? "",
         UpdateTasks => "Lista de tarefas",
+        ListMacros => "Macros do RootDock",
+        SaveMacro => Text(input, "name") ?? "",
         _ => name,
     };
 
@@ -333,6 +391,8 @@ public sealed class AssistantTools(IAssistantHost host, WebTools? web = null)
                 FindFiles => await FindFilesAsync(call.Input, ct).ConfigureAwait(false),
                 RememberTool => Remember(call.Input),
                 UpdateTasks => Tasks(call.Input),
+                ListMacros => AssistantMacros.Describe(Macros().List()),
+                SaveMacro => SaveMacroNow(call.Input),
                 WebSearch => await Web().SearchAsync(Required(call.Input, "query"), ct).ConfigureAwait(false),
                 WebFetch => await Web().FetchAsync(Required(call.Input, "url"), Number(call.Input, "offset") ?? 0, ct).ConfigureAwait(false),
                 _ => throw new ToolInputException($"Ferramenta desconhecida: {call.Name}."),
@@ -462,6 +522,25 @@ public sealed class AssistantTools(IAssistantHost host, WebTools? web = null)
         host.ShowTasks(tasks);
         var done = tasks.Count(t => t.Status == "done");
         return tasks.Count == 0 ? "Lista de tarefas limpa." : $"Lista atualizada: {done} de {tasks.Count} concluídas.";
+    }
+
+    private IAssistantMacroBook Macros() =>
+        macros ?? throw new ToolInputException("As macros do RootDock não estão disponíveis nesta conversa.");
+
+    private string SaveMacroNow(JsonElement input)
+    {
+        var book = Macros();
+        try
+        {
+            var macro = AssistantMacros.Build(input, book.List());
+            var replaced = Text(input, "replace_id") is { Length: > 0 };
+            book.Save(macro);
+            return AssistantMacros.Saved(macro, replaced);
+        }
+        catch (MacroRequestException ex)
+        {
+            throw new ToolInputException(ex.Message);
+        }
     }
 
     private string Remember(JsonElement input)

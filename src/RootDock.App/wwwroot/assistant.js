@@ -27,6 +27,8 @@
     remember: 'Anotar',
     web_search: 'Buscar na web',
     web_fetch: 'Abrir página',
+    list_macros: 'Ver macros',
+    save_macro: 'Salvar macro',
   };
 
   let state = { busy: false, providers: [], provider: '', mode: 'ask', target: null };
@@ -320,8 +322,16 @@
     endSegment();
     const el = document.createElement('div');
     el.className = 'tool running';
-    el.innerHTML = '<button class="tool-head"><span class="tool-kind"></span><span class="tool-summary"></span><span class="tool-state">rodando</span></button><div class="tool-body"><pre></pre></div>';
+    // Cabeçalho (bolinha de estado, o que é, resumo) e, embaixo, a caixa cinza com o que entrou (IN)
+    // e o que voltou (OUT). Comando de shell mostra a linha inteira na caixa; os outros, só a saída.
+    el.innerHTML = '<button class="tool-head"><span class="tool-dot"></span><span class="tool-kind"></span><span class="tool-summary"></span><span class="tool-state">rodando</span></button>' +
+      '<div class="tool-box"><div class="tool-row tool-in"><span class="tool-tag">IN</span><pre></pre></div>' +
+      '<div class="tool-row tool-out"><span class="tool-tag">OUT</span><pre></pre></div></div>';
     el.querySelector('.tool-kind').textContent = TOOL_LABELS[msg.name] || msg.name;
+    if (msg.name === 'run_command' || msg.name === 'type_in_terminal') {
+      el.classList.add('shell');
+      el.querySelector('.tool-in pre').textContent = msg.summary || '';
+    }
     const isPath = /^(read|write|edit)_file$|_directory$/.test(msg.name);
     // Caminho comprido: corta no começo, para o nome do arquivo ficar à vista.
     el.querySelector('.tool-summary').classList.toggle('path', isPath);
@@ -352,7 +362,9 @@
     el.classList.remove('running', 'danger');
     el.classList.add(msg.ok ? 'ok' : 'fail');
     el.querySelector('.tool-state').textContent = msg.ok ? 'feito' : el.dataset.refused ? 'recusado' : 'erro';
-    el.querySelector('.tool-body pre').textContent = msg.output || '';
+    const output = (msg.output || '').replace(/\r/g, '').replace(/\s+$/, '');
+    el.querySelector('.tool-out pre').textContent = output;
+    el.classList.toggle('has-out', output.length > 0);
     if (!msg.ok && !el.dataset.refused) el.classList.add('open');
   }
 
@@ -375,7 +387,9 @@
     box.className = 'confirm';
     const text = document.createElement('p');
     text.className = 'confirm-text';
-    text.textContent = msg.web
+    text.textContent = msg.macro
+      ? 'Salvar esta macro no RootDock? (fica em Comandos → Minhas macros; nada é executado agora)'
+      : msg.web
       ? 'Abrir esta página da internet? (o pedido sai deste computador)'
       : (msg.destructive ? 'Regra da organização: este comando precisa do seu clique. Executar em ' : 'Executar em ') + msg.target + '?';
     box.appendChild(text);
@@ -522,6 +536,12 @@
     send({ type: 'send', text, images: attachments.splice(0) });
     renderAttachments();
   }
+
+  $('retry-btn').addEventListener('click', () => {
+    if (state.busy) return;
+    $('retry').hidden = true; // some na hora: um segundo clique não manda duas vezes
+    send({ type: 'retry' });
+  });
 
   input.addEventListener('input', autosize);
   input.addEventListener('keydown', (e) => {
@@ -887,6 +907,8 @@
     remember: 'Anotando',
     web_search: 'Pesquisando na web',
     web_fetch: 'Abrindo a página',
+    list_macros: 'Lendo as macros',
+    save_macro: 'Salvando a macro',
   };
   const MARKS = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
   const calm = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -973,6 +995,12 @@
 
     sendBtn.classList.toggle('stop', next.busy);
     setWorking(next.busy, next.busySince);
+    const offer = !next.busy && !!next.canRetry;
+    if ($('retry').hidden === offer) {
+      const stick = nearBottom();
+      $('retry').hidden = !offer;
+      if (stick) scrollDown();
+    }
     sendBtn.title = next.busy ? 'Parar (Esc)' : 'Enviar (Enter)';
     sendBtn.innerHTML = next.busy
       ? '<svg viewBox="0 0 16 16"><rect x="4.5" y="4.5" width="7" height="7" rx="1" fill="currentColor"/></svg>'

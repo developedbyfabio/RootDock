@@ -66,6 +66,9 @@ public sealed partial class AssistantService : IDisposable
     private Conversation? _shown;
     private ClaudeCodeStatus? _claudeStatus;
 
+    /// <summary>As macros do RootDock, para o assistente listar e criar (a janela principal é quem as guarda).</summary>
+    public IAssistantMacroBook? Macros { get; init; }
+
     public AssistantService(Dispatcher dispatcher, TerminalWorkspace workspace, AssistantSettings settings, Action save, CredentialVault vault, string dataDirectory)
     {
         _dispatcher = dispatcher;
@@ -163,6 +166,18 @@ public sealed partial class AssistantService : IDisposable
                 if (ForActiveTab() is { Session.State: TerminalState.Connected, Session.SshClient: not null } conversation)
                 {
                     _ = conversation.SendAsync(text.Length > 0 ? text : "Veja a imagem anexada.", attached);
+                }
+                else
+                {
+                    Send(new { type = "error", text = "Abra (ou clique em) uma aba SSH conectada: cada aba tem a sua conversa e o assistente age no servidor dela." });
+                }
+
+                break;
+
+            case "retry":
+                if (ForActiveTab() is { Session.State: TerminalState.Connected, Session.SshClient: not null } failed)
+                {
+                    _ = failed.RetryAsync();
                 }
                 else
                 {
@@ -479,7 +494,8 @@ public sealed partial class AssistantService : IDisposable
         "neles, e você age no servidor da sessão SSH desta conversa usando as ferramentas: run_command, read_terminal e " +
         "type_in_terminal (o terminal que ela está vendo); read_file, write_file, edit_file, list_directory (arquivos por SFTP); " +
         "search_files e find_files (busca no código); remember (anotações permanentes deste servidor); update_tasks (a lista " +
-        "de tarefas que ela acompanha na tela); e busca na web e leitura de páginas (web_search e web_fetch, ou WebSearch e " +
+        "de tarefas que ela acompanha na tela); list_macros e save_macro (as macros do RootDock: rotinas de comandos que ela " +
+        "executa com um clique em qualquer sessão; crie uma quando ela pedir um procedimento para repetir); e busca na web e leitura de páginas (web_search e web_fetch, ou WebSearch e " +
         "WebFetch, conforme o que estiver disponível), para documentação e erros. " +
         "Ela pode anexar imagens (prints de tela) às mensagens. " +
         "Você não tem acesso ao computador dela, só ao servidor. Os dados do servidor, as anotações permanentes e as instruções " +
@@ -558,6 +574,7 @@ public sealed partial class AssistantService : IDisposable
             type = "state",
             busy = _shown?.Busy == true,
             busySince = _shown is { Busy: true } working ? working.BusySince : 0,
+            canRetry = _shown?.CanRetry == true,
             mode = _settings.Mode == "auto" ? "auto" : "ask",
             showInTerminal = _settings.ShowInTerminal,
             provider = Provider.Id,
@@ -713,6 +730,19 @@ public sealed partial class AssistantService : IDisposable
         private readonly List<string> _undoable = [];
 
         private string? _undoNote;
+
+        /// <summary>O resumo pendente em _resume vem de uma troca de modelo (e não do histórico reaberto).</summary>
+        private bool _resumeSwitched;
+
+        /// <summary>O que reenviar se a pessoa pedir para tentar de novo a resposta que falhou ou foi interrompida.</summary>
+        private (string Text, IReadOnlyList<(ChatImage Image, string Thumb)> Attached)? _retry;
+
+        private const string ContinueAfterFailure =
+            "[A resposta anterior parou no meio, por um erro ou porque a pessoa interrompeu, e ela pediu para tentar de novo. " +
+            "Continue de onde parou para concluir o último pedido; não repita o que já foi feito, e confira o estado antes de " +
+            "refazer algo que altera o servidor.]";
+
+        public bool CanRetry => !Busy && _retry is not null;
         private bool _restartPending;
 
         private AssistantAgent? _agent;
@@ -738,7 +768,7 @@ public sealed partial class AssistantService : IDisposable
                     }
                 },
                 tasks => Emit(new { type = "tasks", items = tasks.Select(t => new { title = t.Title, status = t.Status }) }));
-            _runner = new AssistantToolRunner(new AssistantTools(_host, Web), this) { Mode = owner.Mode };
+            _runner = new AssistantToolRunner(new AssistantTools(_host, Web, owner.Macros), this) { Mode = owner.Mode };
         }
 
         public TerminalSession Session { get; }
@@ -786,18 +816,9 @@ public sealed partial class AssistantService : IDisposable
 
             try
             {
-                var events = new List<JsonElement>(_log.Count);
-                string? title = null;
-                foreach (var (json, delta) in _log)
-                {
-                    using var document = JsonDocument.Parse(json ?? JsonSerializer.Serialize(new { type = "delta", text = delta!.ToString() }));
-                    var item = document.RootElement.Clone();
-                    events.Add(item);
-                    if (title is null && AssistantService.Text(item, "type") == "user")
-                    {
-                        title = AssistantService.Text(item, "text");
-                    }
-                }
+                var events = Events();
+                var title = events.Where(item => AssistantService.Text(item, "type") == "user")
+                    .Select(item => AssistantService.Text(item, "text")).FirstOrDefault();
 
                 title = (title ?? "Conversa").ReplaceLineEndings(" ").Trim();
                 _owner._history.Save(new AssistantHistoryRecord
@@ -816,6 +837,19 @@ public sealed partial class AssistantService : IDisposable
             {
                 Log.Error("Assistente: gravar histórico", ex);
             }
+        }
+
+        /// <summary>Tudo o que aconteceu na conversa até aqui, como eventos (o mesmo formato do histórico).</summary>
+        private List<JsonElement> Events()
+        {
+            var events = new List<JsonElement>(_log.Count);
+            foreach (var (json, delta) in _log)
+            {
+                using var document = JsonDocument.Parse(json ?? JsonSerializer.Serialize(new { type = "delta", text = delta!.ToString() }));
+                events.Add(document.RootElement.Clone());
+            }
+
+            return events;
         }
 
         /// <summary>Reabre uma conversa do histórico nesta aba; o modelo recebe o que foi dito ao continuar.</summary>
@@ -856,6 +890,8 @@ public sealed partial class AssistantService : IDisposable
             _created = record.Created;
             _savedCount = _log.Count;
             _resume = AssistantHistoryStore.Transcript(record.Events);
+            _resumeSwitched = false;
+            _retry = null;
         }
 
         public void Stop() => _turn?.Cancel();
@@ -893,7 +929,18 @@ public sealed partial class AssistantService : IDisposable
             _introduced = false;
             if (announce && had)
             {
-                Emit(new { type = "note", text = "Provedor ou modelo trocado: a conversa recomeça daqui (o novo modelo não vê as mensagens anteriores)." });
+                // O modelo novo começa sabendo o que já foi dito e feito, para continuar o raciocínio.
+                try
+                {
+                    _resume = AssistantHistoryStore.Transcript(Events());
+                    _resumeSwitched = true;
+                    Emit(new { type = "note", text = "Provedor ou modelo trocado: o novo modelo recebe a conversa até aqui e continua dela." });
+                }
+                catch (JsonException ex)
+                {
+                    Log.Error("Assistente: repassar a conversa ao novo modelo", ex);
+                    Emit(new { type = "note", text = "Provedor ou modelo trocado: não foi possível repassar a conversa anterior; o novo modelo começa daqui." });
+                }
             }
         }
 
@@ -909,6 +956,7 @@ public sealed partial class AssistantService : IDisposable
             _created = DateTime.UtcNow;
             _savedCount = 0;
             _resume = null;
+            _retry = null;
         }
 
         /// <summary>
@@ -1001,13 +1049,18 @@ public sealed partial class AssistantService : IDisposable
             return json.Append("]}").ToString();
         }
 
-        public async Task SendAsync(string text, IReadOnlyList<(ChatImage Image, string Thumb)> attached)
+        /// <summary>Tenta de novo a resposta que falhou: reenvia a pergunta ou, se o trabalho já tinha começado, manda continuar.</summary>
+        public Task RetryAsync() =>
+            !Busy && _retry is { } again ? SendAsync(again.Text, again.Attached, retry: true) : Task.CompletedTask;
+
+        public async Task SendAsync(string text, IReadOnlyList<(ChatImage Image, string Thumb)> attached, bool retry = false)
         {
             if (Busy)
             {
                 return;
             }
 
+            _retry = null;
             Busy = true;
             var turn = _turn = new CancellationTokenSource();
             var ct = turn.Token;
@@ -1017,9 +1070,23 @@ public sealed partial class AssistantService : IDisposable
                 _changes.Clear();
             }
 
-            Emit(attached.Count > 0
-                ? new { type = "user", text, images = attached.Select(a => a.Thumb).ToArray() }
-                : (object)new { type = "user", text });
+            if (retry)
+            {
+                Emit(new { type = "note", text = "Tentando novamente." });
+            }
+            else
+            {
+                Emit(attached.Count > 0
+                    ? new { type = "user", text, images = attached.Select(a => a.Thumb).ToArray() }
+                    : (object)new { type = "user", text });
+            }
+
+            // Se a resposta falhar sem ter feito nada, tentar de novo reenvia a mesma pergunta; se já tinha
+            // começado (texto, comandos), a pergunta está com o modelo e o certo é pedir para continuar.
+            var before = _log.Count;
+            (string, IReadOnlyList<(ChatImage Image, string Thumb)>) Again() =>
+                _log.Count > before ? (ContinueAfterFailure, []) : (text, attached);
+
             _owner.PostState();
             try
             {
@@ -1037,8 +1104,13 @@ public sealed partial class AssistantService : IDisposable
                 if (_resume is { Length: > 0 } earlier)
                 {
                     // Conversa reaberta do histórico: o modelo recebe o que já foi dito e feito.
-                    full = "[Conversa anterior reaberta do histórico do RootDock. Continue de onde parou; o estado do servidor pode ter " +
-                           $"mudado desde então, confira antes de assumir.]\n{earlier}\n[Fim da conversa anterior]\n\n{full}";
+                    var opening = _resumeSwitched
+                        ? "[A pessoa trocou de modelo no meio desta conversa do RootDock. Abaixo está o que já foi dito e feito, com o modelo " +
+                          "anterior. Continue de onde parou, como se a conversa fosse sua; resultados longos de ferramentas estão cortados, " +
+                          "rode de novo o que precisar ver inteiro.]"
+                        : "[Conversa anterior reaberta do histórico do RootDock. Continue de onde parou; o estado do servidor pode ter " +
+                          "mudado desde então, confira antes de assumir.]";
+                    full = $"{opening}\n{earlier}\n[Fim da conversa anterior]\n\n{full}";
                     _resume = null;
                 }
 
@@ -1064,17 +1136,20 @@ public sealed partial class AssistantService : IDisposable
             }
             catch (OperationCanceledException)
             {
+                _retry = Again();
                 Emit(new { type = "note", text = "Interrompido." });
                 _lastContext = null;
             }
             catch (ChatModelException ex)
             {
+                _retry = Again();
                 Emit(new { type = "error", text = ex.Message });
                 _lastContext = null;
             }
             catch (Exception ex)
             {
                 Log.Error("Assistente", ex);
+                _retry = Again();
                 Emit(new { type = "error", text = "Erro inesperado: " + ex.Message });
                 _lastContext = null;
             }
@@ -1195,6 +1270,7 @@ public sealed partial class AssistantService : IDisposable
             {
                 AssistantTools.WriteFile => AssistantService.Text(call.Input, "content"),
                 AssistantTools.EditFile => $"- {AssistantService.Text(call.Input, "old_text")}\n+ {AssistantService.Text(call.Input, "new_text")}",
+                AssistantTools.SaveMacro => AssistantMacros.Preview(call.Input),
                 _ => null,
             };
             _owner._dispatcher.BeginInvoke(() =>
@@ -1209,7 +1285,8 @@ public sealed partial class AssistantService : IDisposable
                     detail = detail is { Length: > 4000 } ? detail[..4000] + "\n[...]" : detail,
                     destructive = check.Kind == PermissionKind.AskDestructive,
                     reasons = check.Reasons,
-                    production = !AssistantTools.IsWeb(call.Name) && Session.Entry.Environment == SessionEnvironment.Production,
+                    production = !AssistantTools.IsWeb(call.Name) && !AssistantTools.IsMacro(call.Name) && Session.Entry.Environment == SessionEnvironment.Production,
+                    macro = AssistantTools.IsMacro(call.Name),
                     target = _host.Label,
                     web = AssistantTools.IsWeb(call.Name),
                 });

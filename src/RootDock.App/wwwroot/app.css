@@ -273,6 +273,8 @@ body { display: flex; flex-direction: column; }
 }
 #empty[hidden] { display: none; }
 #empty h1 { margin: 0; color: var(--text); font-weight: 600; font-size: 26px; letter-spacing: .5px; }
+#empty h1 { display: flex; align-items: center; justify-content: center; gap: 10px; }
+#empty h1 img { flex: none; width: 32px; height: 32px; }
 #empty p { margin: 0 0 18px; max-width: 640px; text-align: center; }
 .shortcuts td { padding: 3px 14px; }
 .shortcuts td:first-child { text-align: right; }
@@ -1061,3 +1063,6 @@ body.fx-glow #empty h1 { text-shadow: 0 0 12px color-mix(in srgb, var(--accent) 
 /* Chuva de caracteres do Matrix na tela inicial. */
 #empty canvas.rain { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .32; pointer-events: none; }
 #empty > :not(canvas) { position: relative; z-index: 1; }
+
+/* Botão do assistente: a sigla "IA" no lugar de um ícone */
+.icon-btn .ia-mark { font-size: 12px; font-weight: 700; letter-spacing: .5px; line-height: 1; }

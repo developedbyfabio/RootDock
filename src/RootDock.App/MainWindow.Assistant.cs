@@ -20,7 +20,10 @@ public partial class MainWindow
 
     private void InitAssistant()
     {
-        _assistant = new AssistantService(Dispatcher, _workspace, _settings.Assistant, SaveSettings, _vault, _paths.DataDirectory);
+        _assistant = new AssistantService(Dispatcher, _workspace, _settings.Assistant, SaveSettings, _vault, _paths.DataDirectory)
+        {
+            Macros = new AssistantMacroBook(this),
+        };
         _assistant.CloseRequested += () => SetAssistantPanel(false);
         _workspace.AssistantToggleRequested += () => SetAssistantPanel(!IsAssistantPanelOpen);
         SizeChanged += (_, _) =>
@@ -37,6 +40,35 @@ public partial class MainWindow
             // Depois da janela e dos terminais: a página do chat não disputa o primeiro desenho.
             Loaded += (_, _) => Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, () => SetAssistantPanel(true, focus: false));
         }
+    }
+
+    /// <summary>
+    /// As macros vistas pelo assistente. As ferramentas rodam fora da thread da tela; ler e gravar
+    /// acontece nela, para não disputar a lista com o painel de comandos e a janela de macros.
+    /// </summary>
+    private sealed class AssistantMacroBook(MainWindow window) : RootDock.Core.Assistant.IAssistantMacroBook
+    {
+        public IReadOnlyList<RootDock.Core.Macros.CommandMacro> List() =>
+            window.Dispatcher.Invoke(() => window._settings.Macros.Select(m => m.Clone()).ToList());
+
+        public void Save(RootDock.Core.Macros.CommandMacro macro) => window.Dispatcher.Invoke(() =>
+        {
+            var macros = window._settings.Macros;
+            var index = macros.FindIndex(m => m.Id == macro.Id);
+            if (index >= 0)
+            {
+                macros[index] = macro;
+            }
+            else
+            {
+                macros.Add(macro);
+            }
+
+            window.SaveSettings();
+            window._commands?.MacrosChanged(expand: true);
+            Dialogs.MacrosWindow.RefreshIfOpen();
+            Log.Info($"Assistente: macro \"{macro.Name}\" {(index >= 0 ? "atualizada" : "criada")} ({macro.Steps.Count} passos).");
+        });
     }
 
     private void SetAssistantPanel(bool open, bool focus = true)

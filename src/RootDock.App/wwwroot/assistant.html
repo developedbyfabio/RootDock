@@ -9,7 +9,7 @@
 </head>
 <body>
   <header id="head">
-    <svg class="logo" viewBox="0 0 16 16"><path d="M8 1.5l1.6 3.9 3.9 1.6-3.9 1.6L8 12.5 6.4 8.6 2.5 7l3.9-1.6z"/><path d="M12.6 10.8l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6z"/></svg>
+    <span class="logo" aria-hidden="true">IA</span>
     <div class="titles">
       <div class="title">Assistente</div>
       <div id="target" class="target"></div>
@@ -44,6 +44,13 @@
       <span id="working-mark" aria-hidden="true">✻</span>
       <span id="working-verb">Pensando</span><span id="working-dots" aria-hidden="true">…</span>
       <span id="working-info"></span>
+    </div>
+    <!-- A última resposta falhou ou foi interrompida: um clique tenta de novo, sem redigitar -->
+    <div id="retry" hidden>
+      <button id="retry-btn" class="btn" title="Tenta de novo a resposta que falhou ou foi interrompida">
+        <svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.5-3.6"/><path d="M13 2.5v3h-3"/></svg>
+        <span>Tentar novamente</span>
+      </button>
     </div>
   </main>
 
