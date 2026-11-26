@@ -50,7 +50,7 @@ public sealed class CodexSession(
     public bool HasHistory => _started;
 
     /// <summary>
-    /// Procura o codex.exe: variável ROOTDOCK_CODEX_PATH, PATH, o que o aplicativo do ChatGPT/Codex
+    /// Procura o codex.exe: variável ROOTDOCK_CODEX_PATH (um caminho, ou "none" para não usar nenhum), PATH, o que o aplicativo do ChatGPT/Codex
     /// deixa em %LOCALAPPDATA%\OpenAI\Codex\bin (a pasta tem um código que muda a cada atualização:
     /// vale o mais novo) e a instalação por npm.
     /// </summary>
@@ -59,6 +59,11 @@ public sealed class CodexSession(
         var candidates = new List<string>();
         if (Environment.GetEnvironmentVariable("ROOTDOCK_CODEX_PATH") is { Length: > 0 } chosen)
         {
+            if (ClaudeCodeSession.IsOff(chosen))
+            {
+                return null; // "none": age como se não houvesse Codex nesta máquina
+            }
+
             candidates.Add(chosen.Trim().Trim('"'));
         }
 
@@ -67,6 +72,12 @@ public sealed class CodexSession(
         candidates.AddRange(AppCopies(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenAI", "Codex", "bin")));
         candidates.AddRange(path.Select(d => Path.Combine(d.Trim(), "codex.cmd")));
         candidates.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm", "codex.cmd"));
+        return FirstUsable(candidates);
+    }
+
+    /// <summary>O primeiro candidato que existe e dá para executar; null se nenhum (Codex não instalado).</summary>
+    internal static string? FirstUsable(IEnumerable<string> candidates)
+    {
         foreach (var candidate in candidates)
         {
             try
@@ -521,24 +532,39 @@ public sealed class CodexSession(
     }
 
     /// <summary>Erro do Codex com a orientação do que fazer quando é login, limite da conta ou instalação.</summary>
-    private string Explain(string error)
+    private string Explain(string error) => Friendly(error) ??
+        (_started && _threadId is not null
+            ? Short(error)
+            : Short(error) + $"\n\nO Codex usado foi: {codexPath}. Se o erro continuar, atualize o aplicativo do ChatGPT (ou o Codex) e abra o RootDock de novo.");
+
+    private static string Short(string error) => error.Length > 700 ? error[..700] + "..." : error;
+
+    /// <summary>
+    /// A explicação em português para os erros que têm o que fazer (os textos são os que o próprio
+    /// Codex emite); null para os demais, que seguem como vieram.
+    /// </summary>
+    internal static string? Friendly(string error)
     {
-        var text = error.Length > 700 ? error[..700] + "..." : error;
-        if (text.Contains("401", StringComparison.Ordinal) || text.Contains("not logged in", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("login", StringComparison.OrdinalIgnoreCase) || text.Contains("unauthorized", StringComparison.OrdinalIgnoreCase))
+        var text = Short(error);
+        bool Has(params string[] parts) => parts.Any(p => text.Contains(p, StringComparison.OrdinalIgnoreCase));
+
+        // Limite antes de login: a mensagem de limite traz um link de conta que confundiria com login.
+        if (Has("usage limit", "credit limit", "out of credits", "quota exceeded", "usage_limit_reached", "rate limit"))
+        {
+            return "A conta ChatGPT chegou ao limite de uso do Codex por agora. Espere o limite renovar, ou troque de modelo ou de provedor no botão do modelo.\n" + text;
+        }
+
+        if (Has("high load", "server_overloaded", "overloaded", "capacity unavailable"))
+        {
+            return "O Codex está sobrecarregado neste momento. Tente de novo em instantes (botão Tentar novamente).\n" + text;
+        }
+
+        if (Has("not logged in", "unauthorized", "401", "please log in", "codex login", "login required", "token expired", "refresh token"))
         {
             return "O Codex pediu login. Abra \"Trocar de provedor ou chave...\" no botão do modelo, abaixo do campo de mensagem, e clique em Entrar.\n" + text;
         }
 
-        if (text.Contains("usage limit", StringComparison.OrdinalIgnoreCase) || text.Contains("rate limit", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("quota", StringComparison.OrdinalIgnoreCase) || text.Contains("429", StringComparison.Ordinal))
-        {
-            return "A conta ChatGPT chegou ao limite de uso do Codex por agora. Espere o limite renovar ou troque de modelo ou de provedor.\n" + text;
-        }
-
-        return _started && _threadId is not null
-            ? text
-            : text + $"\n\nO Codex usado foi: {codexPath}. Se o erro continuar, atualize o aplicativo do ChatGPT (ou o Codex) e abra o RootDock de novo.";
+        return null;
     }
 
     private static string LastLines(string text, int max)

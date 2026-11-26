@@ -109,6 +109,53 @@ public class CodexSessionTests : IDisposable
         Assert.Equal(account, status.Account);
     }
 
+    // Os textos são os que o codex.exe traz dentro dele.
+    [Theory]
+    [InlineData("You've hit your usage limit. Upgrade to Plus to continue using Codex (https://chatgpt.com/explore/plus), or try again at 3:15 PM.", "limite de uso")]
+    [InlineData("You've reached your usage limit. Increase your limits to continue using codex.", "limite de uso")]
+    [InlineData("You've reached your workspace credit limit", "limite de uso")]
+    [InlineData("Your workspace is out of credits. Ask your workspace owner to add more.", "limite de uso")]
+    [InlineData("Quota exceeded. Check your plan.", "limite de uso")]
+    [InlineData("Codex is currently experiencing high load.", "sobrecarregado")]
+    [InlineData("unexpected status 401 Unauthorized", "pediu login")]
+    [InlineData("Not logged in. Run codex login.", "pediu login")]
+    public void Friendly_ExplainsWhatThePersonCanDo(string error, string expected)
+    {
+        var text = CodexSession.Friendly(error)!;
+        Assert.Contains(expected, text);
+        Assert.Contains(error, text); // o texto original segue junto
+    }
+
+    [Theory]
+    [InlineData("The 'x' model is not supported when using Codex with a ChatGPT account.")]
+    [InlineData("stream disconnected before completion")]
+    public void Friendly_LeavesOtherErrorsAsTheyCame(string error) => Assert.Null(CodexSession.Friendly(error));
+
+    [Fact]
+    public void FirstUsable_SkipsWhatDoesNotExistAndStoreStubs_AndIsNullWithoutCodex()
+    {
+        Directory.CreateDirectory(_folder);
+        var stub = Path.Combine(_folder, "atalho-da-loja.exe");
+        File.WriteAllBytes(stub, []);
+        var real = Path.Combine(_folder, "codex.exe");
+        File.WriteAllText(real, "x");
+        var cmd = Path.Combine(_folder, "codex.cmd");
+        File.WriteAllText(cmd, "");
+
+        Assert.Null(CodexSession.FirstUsable([]));
+        Assert.Null(CodexSession.FirstUsable([Path.Combine(_folder, "nao-existe.exe"), stub, "caminho\0inválido"]));
+        Assert.Equal(real, CodexSession.FirstUsable([Path.Combine(_folder, "nao-existe.exe"), stub, real, cmd]));
+        Assert.Equal(cmd, CodexSession.FirstUsable([stub, cmd])); // atalho .cmd do npm vale mesmo vazio
+    }
+
+    [Theory]
+    [InlineData("none", true)]
+    [InlineData(" OFF ", true)]
+    [InlineData("\"none\"", true)]
+    [InlineData(@"C:\none\codex.exe", false)]
+    [InlineData("", false)]
+    public void IsOff_OnlyTheSwitchWords(string value, bool off) => Assert.Equal(off, ClaudeCodeSession.IsOff(value));
+
     [Fact]
     public void AppCopies_PrefersTheNewestCopyTheAppKeeps()
     {

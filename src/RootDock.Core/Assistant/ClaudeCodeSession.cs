@@ -48,6 +48,11 @@ public sealed class ClaudeCodeSession(
         var candidates = new List<string>();
         if (Environment.GetEnvironmentVariable("ROOTDOCK_CLAUDE_PATH") is { Length: > 0 } chosen)
         {
+            if (IsOff(chosen))
+            {
+                return null; // "none": age como se não houvesse Claude Code nesta máquina
+            }
+
             candidates.Add(chosen.Trim().Trim('"'));
         }
 
@@ -80,6 +85,13 @@ public sealed class ClaudeCodeSession(
 
         return null;
     }
+
+    /// <summary>
+    /// Valor das variáveis ROOTDOCK_CLAUDE_PATH e ROOTDOCK_CODEX_PATH que desliga a procura do
+    /// programa: o RootDock age como numa máquina sem ele (serve para conferir esse caminho e para
+    /// quem não quer que o RootDock use uma instalação que existe).
+    /// </summary>
+    internal static bool IsOff(string value) => value.Trim().Trim('"') is var v && (v.Equals("none", StringComparison.OrdinalIgnoreCase) || v.Equals("off", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Instalado? Logado? (pergunta ao próprio Claude Code: "claude auth status").</summary>
     public static async Task<ClaudeCodeStatus> GetStatusAsync(CancellationToken ct)
