@@ -11,13 +11,19 @@ public sealed record ClaudeCodeStatus(string? Path, bool LoggedIn, string? Accou
 }
 
 /// <summary>
+/// Um modelo que o Claude Code oferece a esta conta. Value é o que vai em --model (apelido como
+/// "opus", ou o nome completo); Efforts, os níveis de esforço que ele aceita (vazio = não tem).
+/// </summary>
+public sealed record ClaudeCodeModel(string Value, string Label, string? Resolved, IReadOnlyList<string> Efforts);
+
+/// <summary>
 /// Uma conversa com o Claude Code oficial instalado na máquina, rodando sem janela (como a
 /// extensão do VS Code faz). O login é o do próprio Claude Code: o RootDock não vê nem guarda a
 /// credencial. As ferramentas embutidas dele (que agiriam neste computador) ficam desligadas;
 /// ele só enxerga as do RootDock, que agem no servidor da sessão ativa.
 /// </summary>
 public sealed class ClaudeCodeSession(
-    string claudePath, string workDirectory, string? model, AssistantToolRunner runner, IAssistantObserver observer) : IDisposable
+    string claudePath, string workDirectory, string? model, AssistantToolRunner runner, IAssistantObserver observer, string? effort = null) : IDisposable
 {
     private readonly McpToolServer _server = new(runner.RunAsync);
     private string? _sessionId;
@@ -26,13 +32,25 @@ public sealed class ClaudeCodeSession(
     private AssistantMode _startedMode;
     private bool _wroteText;
     private Process? _process;
+    private string? _files;
+
+    /// <summary>Acima disto as instruções vão por arquivo (a linha de comando do Windows para em 32 mil caracteres).</summary>
+    private const int MaxInlineSystemChars = 12000;
 
     public bool HasHistory => _started;
 
-    /// <summary>Procura o claude.exe: PATH, instalador oficial (~\.local\bin) e npm global.</summary>
+    /// <summary>
+    /// Procura o claude.exe: PATH, instalador oficial (~\.local\bin) e npm global. A variável de
+    /// ambiente ROOTDOCK_CLAUDE_PATH, se apontar para um arquivo que existe, vale antes de tudo.
+    /// </summary>
     public static string? Find()
     {
         var candidates = new List<string>();
+        if (Environment.GetEnvironmentVariable("ROOTDOCK_CLAUDE_PATH") is { Length: > 0 } chosen)
+        {
+            candidates.Add(chosen.Trim().Trim('"'));
+        }
+
         foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
             candidates.Add(Path.Combine(directory.Trim(), "claude.exe"));
@@ -95,6 +113,98 @@ public sealed class ClaudeCodeSession(
         }
     }
 
+    /// <summary>Os apelidos que o Claude Code sempre aceita; usados quando ele não informa a lista.</summary>
+    public static readonly IReadOnlyList<ClaudeCodeModel> FallbackModels =
+    [
+        new("opus", "Opus", null, []),
+        new("sonnet", "Sonnet", null, []),
+        new("haiku", "Haiku", null, []),
+    ];
+
+    /// <summary>
+    /// Os modelos que a conta pode usar, perguntados ao próprio Claude Code (a mesma lista do
+    /// seletor da extensão do VS Code). O primeiro item, de Value "default", é o padrão da conta.
+    /// Lança ChatModelException se ele não responder.
+    /// </summary>
+    public static async Task<IReadOnlyList<ClaudeCodeModel>> ListModelsAsync(CancellationToken ct)
+    {
+        var path = Find() ?? throw new ChatModelException("O Claude Code não está instalado nesta máquina.");
+        try
+        {
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            limit.CancelAfter(TimeSpan.FromSeconds(45));
+            string[] arguments =
+            [
+                "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+                "--tools", "", "--strict-mcp-config", "--setting-sources", "",
+            ];
+            using var process = Process.Start(StartInfo(path, Path.GetTempPath(), arguments))!;
+            using var kill = limit.Token.Register(() => Kill(process));
+            process.ErrorDataReceived += (_, _) => { }; // lê e descarta: stderr cheio travaria o processo
+            process.BeginErrorReadLine();
+            await process.StandardInput.WriteLineAsync("""{"type":"control_request","request_id":"models","request":{"subtype":"initialize"}}""").ConfigureAwait(false);
+            await process.StandardInput.FlushAsync(limit.Token).ConfigureAwait(false);
+            try
+            {
+                while (await process.StandardOutput.ReadLineAsync(limit.Token).ConfigureAwait(false) is { } line)
+                {
+                    if (ParseModels(line) is { Count: > 0 } models)
+                    {
+                        return models;
+                    }
+                }
+            }
+            finally
+            {
+                Kill(process); // só a lista interessa; nenhuma mensagem foi enviada ao modelo
+            }
+
+            throw new ChatModelException("O Claude Code não informou os modelos (versão antiga?). Atualize-o com \"claude update\".");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException ||
+                                   (ex is OperationCanceledException && !ct.IsCancellationRequested))
+        {
+            throw new ChatModelException("O Claude Code não respondeu com a lista de modelos.", ex);
+        }
+    }
+
+    /// <summary>Lê a lista de modelos de uma linha da saída (a resposta ao pedido "initialize"); null se a linha é outra coisa.</summary>
+    internal static IReadOnlyList<ClaudeCodeModel>? ParseModels(string line)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(line);
+            var root = document.RootElement;
+            if (Text(root, "type") != "control_response" ||
+                !root.TryGetProperty("response", out var outer) || outer.ValueKind != JsonValueKind.Object ||
+                !outer.TryGetProperty("response", out var inner) || inner.ValueKind != JsonValueKind.Object ||
+                !inner.TryGetProperty("models", out var list) || list.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            var models = new List<ClaudeCodeModel>();
+            foreach (var item in list.EnumerateArray())
+            {
+                if (Text(item, "value") is not { Length: > 0 } value || models.Any(m => m.Value == value))
+                {
+                    continue;
+                }
+
+                var efforts = item.TryGetProperty("supportedEffortLevels", out var levels) && levels.ValueKind == JsonValueKind.Array
+                    ? levels.EnumerateArray().Where(l => l.ValueKind == JsonValueKind.String).Select(l => l.GetString()!).ToList()
+                    : [];
+                models.Add(new ClaudeCodeModel(value, Text(item, "displayName") is { Length: > 0 } name ? name : value, Text(item, "resolvedModel"), efforts));
+            }
+
+            return models;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>
     /// Envia a mensagem e acompanha a resposta até o fim. Cancelar encerra o processo; a conversa
     /// continua de onde parou na próxima mensagem (o Claude Code guarda o histórico dele).
@@ -154,8 +264,8 @@ public sealed class ClaudeCodeSession(
             }
 
             throw new ChatModelException(error.Length > 0
-                ? "O Claude Code encerrou: " + (error.Length > 600 ? error[..600] + "..." : error)
-                : "O Claude Code encerrou sem responder.");
+                ? "O Claude Code encerrou: " + (error.Length > 600 ? error[..600] + "..." : error) + StartHint()
+                : "O Claude Code encerrou sem responder." + StartHint());
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException)
         {
@@ -187,6 +297,20 @@ public sealed class ClaudeCodeSession(
         }
 
         _server.Dispose();
+        if (_files is not null)
+        {
+            foreach (var file in new[] { _files + ".mcp.json", _files + ".system.txt" })
+            {
+                try
+                {
+                    File.Delete(file);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // fica para trás; não tem segredo dentro
+                }
+            }
+        }
     }
 
     /// <summary>Uma linha do Claude Code. true = a resposta terminou.</summary>
@@ -214,6 +338,11 @@ public sealed class ClaudeCodeSession(
             {
                 case "system" when Text(root, "subtype") == "init":
                     _sessionId = Text(root, "session_id") ?? _sessionId;
+                    break;
+
+                // O Claude Code resume a conversa sozinho quando ela enche a janela do modelo.
+                case "system" when Text(root, "subtype") == "compact_boundary":
+                    observer.Note("Conversa longa: resumi o que já foi feito para continuar sem perder o fio.");
                     break;
 
                 // Só o texto da conversa principal (subagentes têm parent_tool_use_id).
@@ -250,7 +379,7 @@ public sealed class ClaudeCodeSession(
                     {
                         var detail = Text(root, "result") ?? Text(root, "subtype") ?? "erro";
                         throw new ChatModelException(detail.Contains("login", StringComparison.OrdinalIgnoreCase) || detail.Contains("authenticat", StringComparison.OrdinalIgnoreCase)
-                            ? "O Claude Code pediu login. Abra as configurações do assistente e clique em Entrar.\n" + detail
+                            ? "O Claude Code pediu login. Abra \"Trocar de provedor ou chave...\" no botão do modelo, abaixo do campo de mensagem, e clique em Entrar.\n" + detail
                             : "O Claude Code devolveu um erro: " + detail);
                     }
 
@@ -291,6 +420,12 @@ public sealed class ClaudeCodeSession(
         }
     }
 
+    /// <summary>Se o Claude Code nunca chegou a responder nesta conversa, o problema é da instalação: diz como resolver.</summary>
+    private string StartHint() => _started
+        ? ""
+        : $"\n\nO Claude Code usado foi: {claudePath}. Se o erro continuar, atualize-o (claude update) ou instale pelo instalador oficial " +
+          "(no PowerShell: irm https://claude.ai/install.ps1 | iex) e abra o RootDock de novo.";
+
     private Process Start(string system)
     {
         Directory.CreateDirectory(workDirectory);
@@ -312,15 +447,49 @@ public sealed class ClaudeCodeSession(
             "--tools", web,
             "--strict-mcp-config",
             "--setting-sources", "",
-            "--mcp-config", McpConfig(),
             // As ferramentas do RootDock rodam sem pergunta do Claude Code: quem pergunta é o RootDock.
             "--permission-mode", "dontAsk",
             "--allowedTools", $"mcp__{McpToolServer.ServerName}__*,{web}",
-            "--append-system-prompt", system,
         };
+        if (Launcher(claudePath).ViaShell || system.Length > MaxInlineSystemChars)
+        {
+            // Pelo cmd.exe, aspas e quebras de linha não chegam inteiras, e a linha de comando do
+            // Windows tem limite de tamanho: a configuração e as instruções vão em arquivos (a
+            // senha do MCP continua só na variável de ambiente).
+            if (_files is null)
+            {
+                // Sobras de quando o RootDock foi fechado à força (não têm segredo, só ocupam espaço).
+                foreach (var old in Directory.EnumerateFiles(workDirectory, "claude-*.*").Where(f => File.GetLastWriteTimeUtc(f) < DateTime.UtcNow.AddDays(-2)))
+                {
+                    try
+                    {
+                        File.Delete(old);
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        // em uso por outra janela
+                    }
+                }
+            }
+
+            _files ??= Path.Combine(workDirectory, "claude-" + Guid.NewGuid().ToString("N")[..10]);
+            File.WriteAllText(_files + ".mcp.json", McpConfig(), new UTF8Encoding(false));
+            File.WriteAllText(_files + ".system.txt", system, new UTF8Encoding(false));
+            arguments.AddRange(["--mcp-config", _files + ".mcp.json", "--append-system-prompt-file", _files + ".system.txt"]);
+        }
+        else
+        {
+            arguments.AddRange(["--mcp-config", McpConfig(), "--append-system-prompt", system]);
+        }
+
         if (!string.IsNullOrWhiteSpace(model))
         {
             arguments.AddRange(["--model", model.Trim()]);
+        }
+
+        if (!string.IsNullOrWhiteSpace(effort))
+        {
+            arguments.AddRange(["--effort", effort.Trim()]);
         }
 
         if (_sessionId is not null && _started)
@@ -393,39 +562,130 @@ public sealed class ClaudeCodeSession(
             StandardErrorEncoding = Encoding.UTF8,
             StandardInputEncoding = new UTF8Encoding(false),
         };
-        if (path.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase))
+        var launcher = Launcher(path);
+        info.FileName = launcher.FileName;
+        if (launcher.ViaShell)
         {
-            // Instalação por npm. O cmd.exe corta a linha de comando na primeira quebra de linha e
-            // reinterpreta aspas e "&", o que estragaria as instruções: chama o node direto no
-            // programa que o claude.cmd chamaria.
-            var folder = System.IO.Path.GetDirectoryName(path) ?? "";
-            var script = System.IO.Path.Combine(folder, "node_modules", "@anthropic-ai", "claude-code", "cli.js");
-            var node = System.IO.Path.Combine(folder, "node.exe");
-            if (File.Exists(script))
-            {
-                info.FileName = File.Exists(node) ? node : "node.exe";
-                info.ArgumentList.Add(script);
-            }
-            else
-            {
-                // Formato de instalação desconhecido: vai pelo cmd, com os argumentos numa forma que ele não corrompe.
-                info.FileName = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
-                info.ArgumentList.Add("/c");
-                info.ArgumentList.Add(path);
-                arguments = arguments.Select(a => string.Concat(a.ReplaceLineEndings(" ").Select(c => c is '"' ? '\'' : c is '&' or '|' or '<' or '>' or '^' or '%' ? ' ' : c)));
-            }
-        }
-        else
-        {
-            info.FileName = path;
+            // cmd /s /c "..." : com /s o cmd tira só a primeira e a última aspa, e o resto chega como está.
+            var line = string.Join(' ', arguments.Prepend(path).Select(ShellQuote));
+            info.Arguments = $"/d /s /c \"{line}\"";
+            return info;
         }
 
-        foreach (var argument in arguments)
+        foreach (var argument in launcher.Prefix.Concat(arguments))
         {
             info.ArgumentList.Add(argument);
         }
 
         return info;
+    }
+
+    /// <summary>
+    /// Como iniciar o Claude Code a partir do caminho encontrado. Instalação por npm deixa um
+    /// claude.cmd, e o cmd.exe corta a linha na primeira quebra e reinterpreta aspas e "&": sempre
+    /// que dá, chama direto o programa que o .cmd chamaria (o executável nativo das versões
+    /// atuais, ou o node com o cli.js das antigas). ViaShell = não deu, vai pelo cmd.
+    /// </summary>
+    internal static (string FileName, string[] Prefix, bool ViaShell) Launcher(string path)
+    {
+        if (!path.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase))
+        {
+            return (path, [], false);
+        }
+
+        var folder = Path.GetDirectoryName(path) ?? "";
+        var package = Path.Combine(folder, "node_modules", "@anthropic-ai", "claude-code");
+        foreach (var native in new[]
+                 {
+                     Path.Combine(package, "bin", "claude.exe"),
+                     Path.Combine(folder, "node_modules", "@anthropic-ai", "claude-code-win32-x64", "claude.exe"),
+                     Path.Combine(folder, "node_modules", "@anthropic-ai", "claude-code-win32-arm64", "claude.exe"),
+                 })
+        {
+            if (File.Exists(native))
+            {
+                return (native, [], false);
+            }
+        }
+
+        var node = Path.Combine(folder, "node.exe");
+        node = File.Exists(node) ? node : "node.exe";
+        var script = Path.Combine(package, "cli.js");
+        if (File.Exists(script))
+        {
+            return (node, [script], false);
+        }
+
+        // Outro gerenciador (pnpm, yarn, volta...) ou outro formato: o próprio .cmd diz o que chama.
+        foreach (var target in ShimTargets(path))
+        {
+            if (target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && !Path.GetFileName(target).Equals("node.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                return (target, [], false);
+            }
+
+            if (target.EndsWith(".js", StringComparison.OrdinalIgnoreCase) || target.EndsWith(".mjs", StringComparison.OrdinalIgnoreCase) || target.EndsWith(".cjs", StringComparison.OrdinalIgnoreCase))
+            {
+                return (node, [target], false);
+            }
+        }
+
+        return (Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe", [], true);
+    }
+
+    /// <summary>Os arquivos que um atalho .cmd referencia a partir da própria pasta (%~dp0 ou %dp0%), se existirem.</summary>
+    private static IEnumerable<string> ShimTargets(string cmd)
+    {
+        string text;
+        try
+        {
+            var file = new FileInfo(cmd);
+            if (file.Length > 64 * 1024)
+            {
+                yield break;
+            }
+
+            text = File.ReadAllText(cmd);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            yield break;
+        }
+
+        var folder = Path.GetDirectoryName(cmd) ?? "";
+        foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(
+                     text, @"%(?:~dp0|dp0%)[\\/]*([^""%\r\n]+?\.(?:exe|js|mjs|cjs))(?=[""\s]|$)",
+                     System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Multiline))
+        {
+            string target;
+            try
+            {
+                target = Path.GetFullPath(Path.Combine(folder, match.Groups[1].Value.Replace('/', '\\')));
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                continue;
+            }
+
+            if (File.Exists(target))
+            {
+                yield return target;
+            }
+        }
+    }
+
+    /// <summary>Argumento para a linha do cmd: entre aspas quando tem algo que ele reinterpretaria solto.</summary>
+    internal static string ShellQuote(string argument)
+    {
+        var clean = string.Concat(argument.ReplaceLineEndings(" ").Select(c => c is '"' ? '\'' : c is '%' ? ' ' : c));
+        if (clean.EndsWith('\\'))
+        {
+            clean += "\\"; // barra final antes da aspa de fechamento viraria aspa escapada
+        }
+
+        return clean.Length == 0 || clean.Any(c => c is ' ' or '\t' or ',' or ';' or '=' or '(' or ')' or '*' or '&' or '|' or '<' or '>' or '^')
+            ? "\"" + clean + "\""
+            : clean;
     }
 
     private static void Kill(Process process)

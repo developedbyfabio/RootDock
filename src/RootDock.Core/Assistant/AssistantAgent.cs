@@ -208,6 +208,9 @@ public sealed class AssistantToolRunner(AssistantTools tools, IAssistantObserver
 {
     public AssistantMode Mode { get; set; } = AssistantMode.Ask;
 
+    /// <summary>Os bloqueios da pessoa, lidos a cada pedido (ela pode mudar no meio da conversa).</summary>
+    public Func<IReadOnlyList<string>>? Blocked { get; set; }
+
     public async Task<ToolResult> RunAsync(ToolCall call, CancellationToken ct)
     {
         var definition = AssistantTools.Find(call.Name);
@@ -220,7 +223,13 @@ public sealed class AssistantToolRunner(AssistantTools tools, IAssistantObserver
         var check = AssistantPolicy.Evaluate(definition, call.Input, Mode);
         observer.ToolStarted(call, summary);
         ToolResult result;
-        if (check.Kind != PermissionKind.Allow && !await observer.ConfirmAsync(call, summary, check, ct).ConfigureAwait(false))
+        // Bloqueio da pessoa: vale em qualquer modo e não vira pergunta, é recusa.
+        if (!AssistantTools.IsWeb(call.Name) && !AssistantTools.IsMacro(call.Name) &&
+            Blocked?.Invoke() is { Count: > 0 } patterns && AssistantRules.Blocked(patterns, call.Input) is { } hit)
+        {
+            result = new ToolResult(call.Id, AssistantRules.BlockedMessage(hit), IsError: true);
+        }
+        else if (check.Kind != PermissionKind.Allow && !await observer.ConfirmAsync(call, summary, check, ct).ConfigureAwait(false))
         {
             result = new ToolResult(call.Id, "A pessoa não autorizou esta ação. Não tente de outro jeito: pergunte como ela prefere seguir.", IsError: true);
         }

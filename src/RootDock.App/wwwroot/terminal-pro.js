@@ -172,6 +172,22 @@ function resetAttributesAtPrompt(term) {
 paneHooks.push((pane) => resetAttributesAtPrompt(pane.term));
 
 // ------------------------------------------------ Salvar o conteúdo do terminal
+// "Selecionar tudo" marca do começo do histórico até o fim do último texto. O selectAll do
+// xterm pegaria também as linhas vazias abaixo do prompt, e o Copiar levaria um monte de linha em branco.
+function selectTerminalText(pane) {
+  const term = pane.term;
+  const buf = term.buffer.active;
+  for (let y = buf.length - 1; y >= 0; y--) {
+    const line = buf.getLine(y);
+    const width = line ? line.translateToString(true).length : 0;
+    if (width > 0) {
+      term.select(0, 0, y * term.cols + width);
+      return;
+    }
+  }
+  term.clearSelection();
+}
+
 function terminalText(pane) {
   const buf = pane.term.buffer.active;
   const lines = [];
@@ -297,7 +313,7 @@ function showTerminalMenu(pane, x, y) {
   openPopupMenu([
     { label: 'Copiar', hint: 'Ctrl+Shift+C', run: () => send({ type: 'copy', text: selection }), disabled: !selection },
     { label: 'Colar', hint: 'Ctrl+V', run: () => requestPaste(pane) },
-    { label: 'Selecionar tudo', run: () => pane.term.selectAll() },
+    { label: 'Selecionar tudo', run: () => selectTerminalText(pane) },
     'sep',
     { label: 'Buscar...', hint: 'Ctrl+Shift+F', run: () => openSearch() },
     { label: selection ? 'Print da seleção (imagem)...' : 'Print da tela (imagem)...', hint: 'Ctrl+Shift+S', run: () => openSnap(pane) },

@@ -37,6 +37,7 @@
   let renderQueued = false;
   const tools = new Map();     // id → elemento do cartão
   const modelLists = {};       // provedor → nomes de modelo já listados
+  const modelInfo = {};        // provedor → nomes de exibição, grupo "Mais modelos" e níveis de esforço
   const drafts = {};           // provedor → o que foi digitado e ainda não salvo
   const requested = {};        // provedor → a lista de modelos já foi pedida
   const loading = {};          // provedor → lista de modelos a caminho
@@ -125,6 +126,50 @@
 
   const nearBottom = () => chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80;
   const scrollDown = () => { chat.scrollTop = chat.scrollHeight; };
+
+  // Pergunta presa no topo: a última pergunta da pessoa que a rolagem já escondeu lá em cima.
+  // É a que originou o que está na tela, então quem lê uma resposta longa não perde o fio.
+  let pinnedSource = null;
+  function updatePinned() {
+    const top = chat.getBoundingClientRect().top;
+    let found = null;
+    for (const el of messages.querySelectorAll('.msg.user')) {
+      if (el.getBoundingClientRect().bottom < top + 4) found = el; else break;
+    }
+    if (found !== pinnedSource) {
+      pinnedSource = found;
+      if (found) {
+        const text = [...found.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.textContent).join('').trim();
+        // Os prints da pergunta vão junto, em miniatura, acima do texto.
+        const strip = $('pinned-images');
+        strip.textContent = '';
+        const shots = found.querySelectorAll('.user-images img');
+        shots.forEach((img, index) => {
+          const chip = document.createElement('span');
+          chip.className = 'pinned-chip';
+          const small = document.createElement('img');
+          small.src = img.src;
+          small.alt = '';
+          chip.append(small, document.createTextNode(shots.length > 1 ? 'imagem ' + (index + 1) : 'imagem'));
+          // A etiqueta abre a imagem em tamanho grande (o clique no resto da caixa volta à pergunta).
+          const source = { id: img.dataset.id || '', src: img.src };
+          chip.title = 'Clique para ampliar · botão direito para copiar';
+          chip.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); send({ type: 'viewImage', ...source }); });
+          chip.addEventListener('contextmenu', (e) => { e.stopPropagation(); e.preventDefault(); send({ type: 'imageMenu', ...source }); });
+          strip.appendChild(chip);
+        });
+        strip.hidden = strip.children.length === 0;
+        $('pinned-text').textContent = text;
+      }
+    }
+    $('pinned').hidden = !found;
+  }
+  let pinnedTick = 0;
+  const schedulePinned = () => { if (!pinnedTick) pinnedTick = requestAnimationFrame(() => { pinnedTick = 0; updatePinned(); }); };
+  chat.addEventListener('scroll', schedulePinned, { passive: true });
+  new MutationObserver(schedulePinned).observe(messages, { childList: true });
+  window.addEventListener('resize', schedulePinned);
+  $('pinned-btn').addEventListener('click', () => { if (pinnedSource) pinnedSource.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
 
   function add(el) {
     const stick = nearBottom();
@@ -298,18 +343,29 @@
     }
   }
 
+  // Imagem do chat: o clique abre em tamanho grande sobre a janela do RootDock; o botão direito
+  // mostra o menu de copiar e salvar. Quem mostra é o programa (a página só ocupa este painel).
+  function viewable(img, source) {
+    img.classList.add('viewable');
+    img.title = 'Clique para ampliar · botão direito para copiar';
+    img.addEventListener('click', () => send({ type: 'viewImage', ...source() }));
+    img.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); send({ type: 'imageMenu', ...source() }); });
+  }
+
   function userBlock(msg) {
     const el = block('user');
     if (msg.images && msg.images.length) {
       const row = document.createElement('div');
       row.className = 'user-images';
-      for (const src of msg.images) {
-        if (typeof src !== 'string' || !src.startsWith('data:image/')) continue;
+      msg.images.forEach((src, index) => {
+        if (typeof src !== 'string' || !src.startsWith('data:image/')) return;
         const img = document.createElement('img');
         img.src = src;
         img.alt = 'Imagem anexada';
+        img.dataset.id = (msg.ids && msg.ids[index]) || '';
+        viewable(img, () => ({ id: img.dataset.id, src }));
         row.appendChild(img);
-      }
+      });
       if (row.children.length) el.appendChild(row);
       else { const lost = document.createElement('div'); lost.className = 'note'; lost.textContent = '[imagem anexada]'; el.appendChild(lost); }
     }
@@ -458,6 +514,7 @@
       const img = document.createElement('img');
       img.src = a.thumb;
       img.alt = 'Imagem anexada';
+      viewable(img, () => ({ src: 'data:' + a.mime + ';base64,' + a.data }));
       const remove = document.createElement('button');
       remove.textContent = '×';
       remove.title = 'Tirar esta imagem';
@@ -549,7 +606,42 @@
     else if (e.key === 'Escape' && state.busy) { e.preventDefault(); send({ type: 'stop' }); }
   });
   sendBtn.addEventListener('click', submit);
-  modeBox.addEventListener('change', () => send({ type: 'setMode', mode: modeBox.value }));
+  modeBox.addEventListener('change', () => { showMode(modeBox.value); send({ type: 'setMode', mode: modeBox.value }); });
+
+  // Seletor de modo: botão com ícone e um menu próprio (o <select> escondido guarda o valor).
+  const modeMenu = $('mode-menu');
+  const modeBtn = $('mode-btn');
+  function showMode(mode) {
+    $('mode-wrap').classList.toggle('auto', mode === 'auto');
+    $('mode-label').textContent = mode === 'auto' ? 'Automático' : 'Perguntar tudo';
+    for (const item of modeMenu.querySelectorAll('.mode-item')) {
+      const on = item.dataset.mode === mode;
+      item.classList.toggle('selected', on);
+      item.setAttribute('aria-checked', on ? 'true' : 'false');
+    }
+  }
+  function toggleModeMenu(open) {
+    modeMenu.hidden = !open;
+    modeBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) (modeMenu.querySelector('.mode-item.selected') || modeMenu.querySelector('.mode-item')).focus();
+  }
+  modeBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleModeMenu(modeMenu.hidden); });
+  for (const item of modeMenu.querySelectorAll('.mode-item')) {
+    item.addEventListener('click', () => {
+      toggleModeMenu(false);
+      if (modeBox.value !== item.dataset.mode) { modeBox.value = item.dataset.mode; modeBox.dispatchEvent(new Event('change')); }
+      input.focus();
+    });
+  }
+  modeMenu.addEventListener('keydown', (e) => {
+    const items = [...modeMenu.querySelectorAll('.mode-item')];
+    const at = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); toggleModeMenu(false); modeBtn.focus(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); items[(at + 1) % items.length].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); items[(at - 1 + items.length) % items.length].focus(); }
+  });
+  document.addEventListener('click', (e) => { if (!modeMenu.hidden && !modeMenu.contains(e.target)) toggleModeMenu(false); });
+  window.addEventListener('blur', () => toggleModeMenu(false));
   $('show-terminal').addEventListener('click', () => send({ type: 'setShowInTerminal', on: !state.showInTerminal }));
   $('new-chat').addEventListener('click', () => send({ type: 'newChat' }));
   $('close').addEventListener('click', () => send({ type: 'close' }));
@@ -666,15 +758,241 @@
   // ---------- Configurações ----------
 
   const settings = $('settings');
-  const openSettings = () => { settings.hidden = false; renderProviders(); send({ type: 'refreshClaude' }); send({ type: 'getMemory' }); };
-  $('memory-save').addEventListener('click', () => {
+  // Duas vistas na mesma tela: 'rules' (regras, bloqueios, anotações e diário; botão de ajustes) e
+  // 'providers' (provedor, chave e modelo; pelo menu do modelo no rodapé).
+  const openSettings = (view) => {
+    settings.dataset.view = view === 'providers' ? 'providers' : 'rules';
+    $('settings-title').textContent = settings.dataset.view === 'providers' ? 'Provedor, chave e modelo' : 'Configurações do assistente';
+    settings.hidden = false;
+    $('settings-body').scrollTop = 0;
+    if (settings.dataset.view === 'providers') { renderProviders(); send({ type: 'refreshClaude' }); }
+    else send({ type: 'getMemory' });
+  };
+  $('banner').addEventListener('click', () => { if ($('banner').classList.contains('action')) openSettings('providers'); });
+  const saveServerRules = () => {
     $('memory-state').className = 'status';
     $('memory-state').textContent = 'Salvando...';
-    send({ type: 'saveMemory', text: $('memory-text').value });
-  });
-  $('memory-text').addEventListener('input', () => { $('memory-state').textContent = ''; });
-  $('open-settings').addEventListener('click', openSettings);
-  $('provider').addEventListener('click', openSettings);
+    send({ type: 'saveMemory', text: $('memory-text').value, blocked: $('server-blocked-text').value });
+  };
+  const saveGeneralRules = () => {
+    $('rules-state').className = 'status';
+    $('rules-state').textContent = 'Salvando...';
+    send({ type: 'saveRules', general: $('rules-text').value, blocked: $('blocked-text').value });
+  };
+  $('memory-save').addEventListener('click', saveServerRules);
+  for (const id of ['memory-text', 'server-blocked-text']) $(id).addEventListener('input', () => { $('memory-state').textContent = ''; renderPresets(); });
+
+  // ---------- Modelos prontos de regras ----------
+  // Cada modelo é um conjunto de linhas de regra e de bloqueio. Ligar acrescenta as linhas que
+  // faltam nos campos do escopo escolhido e salva; desligar tira exatamente essas linhas. O estado
+  // (ligado ou não) é lido do próprio texto, então editar à mão nunca fica fora de sincronia.
+  const PRESETS = [
+    { name: 'Produção com cuidado', hint: 'Plano e seu ok antes de mudar, backup antes de editar; desligar e formatar ficam bloqueados.',
+      rules: ['Antes de alterar qualquer coisa neste ambiente, mostre o plano (o que vai mudar e como desfazer) e espere eu responder ok.',
+        'Antes de editar um arquivo de configuração, faça uma cópia ao lado dele (cp arquivo arquivo.bak-AAAAMMDD-HHMM).',
+        'Não reinicie nem pare serviços sem me perguntar antes.',
+        'Depois de cada mudança, confira que o serviço continua respondendo e me mostre a evidência.'],
+      blocks: ['/(^|[;&|(]\\s*|\\bsudo\\s+)(shutdown|reboot|poweroff|halt)\\b/', '/\\bsystemctl\\s+(poweroff|reboot|halt|kexec)\\b/', '/\\binit\\s+[06]\\b/', '/\\bmkfs/', '/\\bdd\\b.*\\bof=\\/dev\\//', '/\\brm\\s+-[a-z]*r[a-z]*f?[a-z]*\\s+\\/(\\s|$|\\*)/'] },
+    { name: 'Somente consulta', hint: 'A IA investiga e explica, mas não altera nada: nem arquivos, nem serviços, nem pacotes.',
+      rules: ['Trabalhe em modo somente consulta: não altere, não crie e não apague nada (arquivos, serviços, pacotes, banco, agendamentos).',
+        'Use só comandos que leem. Se a solução exigir uma alteração, descreva os comandos exatos para eu rodar e pare.'],
+      blocks: [] },
+    { name: 'Banco de dados seguro', hint: 'Conferir com SELECT antes de alterar, dump antes de migrar; apagar e recriar o banco ficam bloqueados.',
+      rules: ['Antes de qualquer UPDATE ou DELETE, rode o SELECT count(*) equivalente e me mostre quantas linhas serão afetadas.',
+        'Nunca rode UPDATE ou DELETE sem WHERE.',
+        'Antes de rodar uma migração, faça um dump das tabelas envolvidas e diga onde ficou.',
+        'Prefira desativar (soft delete) a apagar registros de vez.'],
+      blocks: ['/\\bDROP\\s+(DATABASE|SCHEMA)\\b/', 'migrate:fresh', 'migrate:reset', 'migrate:refresh', 'db:wipe', '/\\bTRUNCATE\\s+(TABLE\\s+)?[\\w`"\\[]/'] },
+    { name: 'Git seguro', hint: 'Sem reescrever histórico, sem commit direto na principal, sem segredo no repositório.',
+      rules: ['Nunca reescreva histórico do git (push forçado, reset --hard, rebase em branch compartilhada).',
+        'Não faça commit direto na main ou master: crie uma branch e me diga o nome.',
+        'Antes de commitar, mostre o git status e o git diff resumido. Nunca inclua .env, chaves ou senhas num commit.',
+        'Não faça git push sem eu pedir.'],
+      blocks: ['push --force', 'push -f', '--force-with-lease', 'reset --hard', 'filter-branch', 'filter-repo', '/\\bgit\\s+clean\\s+-[a-z]*f/', 'stash clear'] },
+    { name: 'Segredos protegidos', hint: 'Não exibir senhas, tokens nem chaves privadas; arquivos de senha do sistema ficam bloqueados.',
+      rules: ['Nunca mostre na conversa o valor de senhas, tokens, chaves de API ou chaves privadas. Para conferir uma variável, mostre só o nome e se está preenchida.',
+        'Ao ler um arquivo de configuração com segredos (.env e parecidos), filtre as linhas sensíveis antes de exibir.',
+        'Nunca coloque segredos em comandos, em arquivos versionados ou em mensagens de commit.'],
+      blocks: ['/etc/shadow', '/etc/gshadow', 'id_rsa', 'id_ed25519', 'id_ecdsa'] },
+    { name: 'Código como dev sênior', hint: 'Entender antes de escrever, seguir o padrão do projeto, validar e explicar o que mudou.',
+      rules: ['Antes de escrever código, leia os arquivos vizinhos e siga o padrão do projeto (estilo, nomes, bibliotecas, estrutura). Não introduza biblioteca nova sem me perguntar.',
+        'Faça mudanças pequenas e focadas no que foi pedido; não refatore o que não faz parte da tarefa.',
+        'Depois de alterar, rode o que valida (testes, lint, build ou a própria tela) e corrija o que falhar antes de dizer que terminou.',
+        'Não deixe código morto, comentários de depuração nem dados de teste no que entregar.',
+        'Ao terminar, liste os arquivos alterados, o que mudou em cada um e como eu confiro.'],
+      blocks: [] },
+    { name: 'Respostas objetivas', hint: 'Português do Brasil, solução primeiro, tópicos curtos, sem enrolação.',
+      rules: ['Responda sempre em português do Brasil, começando pela solução, em tópicos curtos e sem emojis.',
+        'Mostre código ou comando só quando ajudar a esclarecer.',
+        'Se estiver em dúvida sobre o que foi pedido ou sobre o ambiente, pergunte antes de agir.'],
+      blocks: [] },
+  ];
+  let presetScope = 'general';
+  let memoryServer = '';
+  // Campo sem conteúdo de verdade fica vazio, para o texto de exemplo aparecer.
+  const fieldText = (text) => (text && text.trim() ? text : '');
+  const presetFields = () => presetScope === 'server'
+    ? { rules: $('memory-text'), blocks: $('server-blocked-text') }
+    : { rules: $('rules-text'), blocks: $('blocked-text') };
+  const fieldLines = (el) => el.value.split('\n').map((l) => l.trim());
+  const ruleLine = (rule) => '- ' + rule;
+  const presetOn = (preset) => {
+    const f = presetFields();
+    const rules = fieldLines(f.rules), blocks = fieldLines(f.blocks);
+    return preset.rules.every((r) => rules.includes(ruleLine(r))) && preset.blocks.every((b) => blocks.includes(b));
+  };
+  function addLines(el, lines) {
+    const have = fieldLines(el);
+    const missing = lines.filter((l) => !have.includes(l));
+    if (missing.length) el.value = (el.value.trim() ? el.value.replace(/\s+$/, '') + '\n' : '') + missing.join('\n') + '\n';
+  }
+  function removeLines(el, lines) {
+    const left = el.value.split('\n').filter((l) => !lines.includes(l.trim())).join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '');
+    el.value = left.trim() ? left : '';
+  }
+  function togglePreset(preset) {
+    const f = presetFields();
+    const on = presetOn(preset);
+    // Linhas que outro modelo ligado também usa ficam: desligar um não pode quebrar o outro.
+    const kept = PRESETS.filter((x) => x !== preset && presetOn(x));
+    const keptRules = new Set(kept.flatMap((x) => x.rules.map(ruleLine))), keptBlocks = new Set(kept.flatMap((x) => x.blocks));
+    if (on) {
+      removeLines(f.rules, preset.rules.map(ruleLine).filter((l) => !keptRules.has(l)));
+      removeLines(f.blocks, preset.blocks.filter((l) => !keptBlocks.has(l)));
+    } else {
+      addLines(f.rules, preset.rules.map(ruleLine));
+      addLines(f.blocks, preset.blocks);
+    }
+    $('preset-state').className = 'status ok';
+    $('preset-state').textContent = '"' + preset.name + '" ' + (on ? 'desligado' : 'ligado') + (presetScope === 'server' ? ' neste servidor.' : ' em todos os servidores.') + ' Já vale para as próximas mensagens.';
+    if (presetScope === 'server') saveServerRules(); else saveGeneralRules();
+    renderPresets();
+  }
+  function renderPresets() {
+    const list = $('preset-list');
+    list.textContent = '';
+    for (const preset of PRESETS) {
+      const b = document.createElement('button');
+      const on = presetOn(preset);
+      b.className = 'preset' + (on ? ' on' : '');
+      b.setAttribute('role', 'switch');
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+      b.innerHTML = '<span class="preset-box"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg></span><span class="preset-text"><span class="preset-name"></span><span class="preset-hint"></span><span class="preset-count"></span></span>';
+      b.querySelector('.preset-name').textContent = preset.name;
+      b.querySelector('.preset-hint').textContent = preset.hint;
+      b.querySelector('.preset-count').textContent = preset.rules.length + (preset.rules.length === 1 ? ' regra' : ' regras') + (preset.blocks.length ? ' · ' + preset.blocks.length + (preset.blocks.length === 1 ? ' bloqueio' : ' bloqueios') : '');
+      b.addEventListener('click', () => togglePreset(preset));
+      list.appendChild(b);
+    }
+  }
+  function setPresetScope(scope, keepState) {
+    presetScope = scope === 'server' && !$('scope-server').disabled ? 'server' : 'general';
+    for (const [id, value] of [['scope-general', 'general'], ['scope-server', 'server']]) {
+      $(id).classList.toggle('on', presetScope === value);
+      $(id).setAttribute('aria-selected', presetScope === value ? 'true' : 'false');
+    }
+    if (!keepState) $('preset-state').textContent = '';
+    renderPresets();
+  }
+  $('scope-general').addEventListener('click', () => setPresetScope('general'));
+  $('scope-server').addEventListener('click', () => setPresetScope('server'));
+  $('runbook-open').addEventListener('click', () => { $('memory-state').textContent = ''; send({ type: 'openRunbook' }); });
+  $('open-settings').addEventListener('click', () => openSettings('rules'));
+  $('rules-save').addEventListener('click', saveGeneralRules);
+  for (const id of ['rules-text', 'blocked-text']) $(id).addEventListener('input', () => { $('rules-state').textContent = ''; renderPresets(); });
+
+  // ---------- Menu de modelos (botão do rodapé) ----------
+  // O botão troca só o modelo do provedor em uso; provedor, chave e regras ficam nas configurações.
+  const modelMenu = $('model-menu');
+  const providerBtn = $('provider');
+  let modelMoreOpen = false;
+  function renderModelMenu() {
+    const p = state.providers.find((x) => x.id === state.provider);
+    modelMenu.textContent = '';
+    if (!p) return;
+    const head = document.createElement('div');
+    head.className = 'mode-menu-head';
+    head.textContent = 'Modelo · ' + p.label.replace(/\s*\(.*\)$/, '');
+    modelMenu.appendChild(head);
+    const info = modelInfo[p.id] || {};
+    const labels = info.labels || {};
+    const more = info.more || [];
+    const items = modelLists[p.id];
+    const current = p.model || '';
+    const item = (value, label) => {
+      const b = document.createElement('button');
+      b.className = 'mode-item' + (value === current ? ' selected' : '');
+      b.setAttribute('role', 'menuitemradio');
+      b.setAttribute('aria-checked', value === current ? 'true' : 'false');
+      b.innerHTML = '<span class="mode-item-text"><span class="mode-item-name"></span></span><svg class="mode-item-check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>';
+      b.querySelector('.mode-item-name').textContent = label;
+      b.addEventListener('click', () => { toggleModelMenu(false); if (value !== current) send({ type: 'saveProvider', id: p.id, model: value }); input.focus(); });
+      modelMenu.appendChild(b);
+    };
+    const note = (text) => { const n = document.createElement('div'); n.className = 'model-note'; n.textContent = text; modelMenu.appendChild(n); };
+    const sep = () => { const d = document.createElement('div'); d.className = 'model-sep'; modelMenu.appendChild(d); };
+    if (loading[p.id] || (!items && requested[p.id])) note('Carregando os modelos...');
+    else if (!items) note('Informe a chave em "Trocar de provedor ou chave..." para ver os modelos.');
+    else {
+      if (p.id === 'claude-code') item('', info.defaultLabel ? 'Padrão da conta (' + info.defaultLabel + ')' : 'Padrão da conta');
+      else if (p.defaultModel) item('', 'Padrão (' + p.defaultModel + ')');
+      if (current && !items.includes(current)) item(current, current);
+      for (const value of items) if (!more.includes(value)) item(value, labels[value] || value);
+      if (more.length) {
+        const showMore = modelMoreOpen || more.includes(current);
+        if (showMore) { sep(); for (const value of more) item(value, labels[value] || value); }
+        else {
+          const b = document.createElement('button');
+          b.className = 'mode-item';
+          b.innerHTML = '<span class="mode-item-text"><span class="mode-item-name">Mais modelos</span></span><svg class="mode-item-check" style="visibility:visible" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg>';
+          b.addEventListener('click', (e) => { e.stopPropagation(); modelMoreOpen = true; renderModelMenu(); });
+          modelMenu.appendChild(b);
+        }
+      }
+      if (p.id === 'claude-code') {
+        const names = { low: 'Baixo', medium: 'Médio', high: 'Alto', xhigh: 'Muito alto', max: 'Máximo' };
+        const levels = (info.efforts || {})[current] || Object.keys(names);
+        if (levels.length) {
+          sep();
+          const row = document.createElement('label');
+          row.className = 'model-effort';
+          const text = document.createElement('span');
+          text.textContent = 'Esforço';
+          const effort = document.createElement('select');
+          const add = (value, label) => { const o = document.createElement('option'); o.value = value; o.textContent = label; effort.appendChild(o); };
+          add('', 'Padrão do modelo');
+          for (const level of levels) if (names[level]) add(level, names[level]);
+          effort.value = levels.includes(p.effort) ? p.effort : '';
+          effort.addEventListener('click', (e) => e.stopPropagation());
+          effort.addEventListener('change', () => send({ type: 'saveProvider', id: p.id, effort: effort.value }));
+          row.append(text, effort);
+          modelMenu.appendChild(row);
+        }
+      }
+    }
+    sep();
+    const other = document.createElement('button');
+    other.className = 'mode-item';
+    other.innerHTML = '<span class="mode-item-text"><span class="mode-item-name">Trocar de provedor ou chave...</span></span>';
+    other.addEventListener('click', () => { toggleModelMenu(false); openSettings('providers'); });
+    modelMenu.appendChild(other);
+  }
+  function toggleModelMenu(open) {
+    modelMenu.hidden = !open;
+    providerBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (!open) { modelMoreOpen = false; return; }
+    const p = state.providers.find((x) => x.id === state.provider);
+    const canList = p && (p.id === 'claude-code' || p.hasKey || (!p.needsKey && (!p.custom || (state.customBaseUrl || '').trim())));
+    if (p && canList && !modelLists[p.id] && !requested[p.id]) { requested[p.id] = true; loading[p.id] = true; send({ type: 'listModels', id: p.id }); }
+    renderModelMenu();
+    // Alinha o menu com o botão, sem sair do painel.
+    const left = providerBtn.offsetLeft;
+    modelMenu.style.left = Math.max(0, Math.min(left, $('composer').clientWidth - modelMenu.offsetWidth)) + 'px';
+  }
+  providerBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleModelMenu(modelMenu.hidden); });
+  modelMenu.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); toggleModelMenu(false); providerBtn.focus(); } });
+  document.addEventListener('click', (e) => { if (!modelMenu.hidden && !modelMenu.contains(e.target)) toggleModelMenu(false); });
+  window.addEventListener('blur', () => toggleModelMenu(false));
   $('settings-close').addEventListener('click', () => { settings.hidden = true; input.focus(); });
 
   function button(label, onClick, className) {
@@ -822,7 +1140,12 @@
         model.addEventListener('input', () => { draft.model = model.value; });
         const apply = () => { delete draft.typingModel; save(p, draft); };
         model.addEventListener('keydown', (e) => { if (e.key === 'Enter') apply(); });
-        body.appendChild(field('Modelo', model, button('Usar', apply, 'primary')));
+        const row = document.createElement('span');
+        row.className = 'field-buttons';
+        const back = button('Ver a lista', () => { delete draft.typingModel; delete draft.model; renderProviders(); });
+        back.title = 'Voltar para a lista de modelos';
+        row.append(button('Usar', apply, 'primary'), back);
+        body.appendChild(field('Modelo', model, row));
       } else {
         const select = document.createElement('select');
         select.dataset.key = p.id + ':model';
@@ -834,11 +1157,20 @@
           option(current, current || (p.custom ? 'Informe o endereço da API para ver os modelos' : 'Salve a chave para ver os modelos'));
           select.disabled = true;
         } else {
-          if (p.id === 'claude-code') option('', 'Padrão da conta');
+          const info = modelInfo[p.id] || {};
+          const labels = info.labels || {};
+          const more = info.more || [];
+          if (p.id === 'claude-code') option('', info.defaultLabel ? 'Padrão da conta (' + info.defaultLabel + ')' : 'Padrão da conta');
           else if (p.defaultModel) option('', 'Padrão (' + p.defaultModel + ')');
           else if (!current) option('', 'Escolha um modelo');
           if (current && !items.includes(current)) option(current, current);
-          for (const item of items) option(item, item);
+          for (const item of items) if (!more.includes(item)) option(item, labels[item] || item);
+          if (more.length) {
+            const group = document.createElement('optgroup');
+            group.label = 'Mais modelos';
+            for (const item of more) { const o = document.createElement('option'); o.value = item; o.textContent = labels[item] || item; group.appendChild(o); }
+            select.appendChild(group);
+          }
           option('\u0000outro', 'Digitar outro nome...');
           select.value = current;
         }
@@ -850,6 +1182,23 @@
         reload.title = 'Buscar de novo a lista de modelos';
         body.appendChild(field('Modelo', select, canList ? reload : null));
       }
+      // Esforço (só na Conta Claude): quanto o modelo pensa antes de responder, como no VS Code.
+      if (p.id === 'claude-code') {
+        const names = { low: 'Baixo', medium: 'Médio', high: 'Alto', xhigh: 'Muito alto', max: 'Máximo' };
+        const known = (modelInfo[p.id] || {}).efforts || {};
+        const levels = known[current] || Object.keys(names);
+        const effort = document.createElement('select');
+        effort.dataset.key = p.id + ':effort';
+        const add = (value, label) => { const o = document.createElement('option'); o.value = value; o.textContent = label; effort.appendChild(o); };
+        add('', 'Padrão do modelo');
+        for (const level of levels) if (names[level]) add(level, names[level]);
+        if (p.effort && !levels.includes(p.effort)) add(p.effort, (names[p.effort] || p.effort) + ' (este modelo não aceita)');
+        effort.value = p.effort || '';
+        effort.disabled = levels.length === 0;
+        effort.addEventListener('change', () => send({ type: 'saveProvider', id: p.id, effort: effort.value }));
+        body.appendChild(field('Esforço', effort));
+      }
+
       if (draft.modelsError) {
         const err = document.createElement('p');
         err.className = 'status bad';
@@ -976,8 +1325,26 @@
     workingTimer = setInterval(updateWorking, 140);
   }
 
+  // Rodapé: provedor e modelo em uso. Na Conta Claude, com o nome de exibição ("Fable 5.2") quando
+  // a lista já foi carregada; antes disso, o apelido com inicial maiúscula.
+  function showProviderLabel(from) {
+    const current = from && from.providers ? from.providers.find((p) => p.id === from.provider) : null;
+    if (!current) { $('provider').textContent = ''; return; }
+    let model = current.model || current.defaultModel || '';
+    if (current.id === 'claude-code' && model) {
+      const labels = (modelInfo[current.id] || {}).labels || {};
+      model = labels[model] || (/^[a-z]+$/.test(model) ? model[0].toUpperCase() + model.slice(1) : model);
+    }
+    $('provider').textContent = current.label.replace(/\s*\(.*\)$/, '') + (model ? ' · ' + model : '');
+  }
+
   function applyState(next) {
+    // A sessão em foco mudou (abriu, fechou ou trocou de aba) com as configurações abertas: as regras
+    // e anotações mostradas são as do servidor, então pede as do novo.
+    const targetKey = (t) => t ? t.label + '|' + t.name : '';
+    const targetChanged = targetKey(state.target) !== targetKey(next.target);
     state = next;
+    if (targetChanged && !settings.hidden && settings.dataset.view === 'rules') send({ type: 'getMemory' });
     const target = $('target');
     target.className = 'target' + (next.target ? (next.target.production ? ' prod' : '') : ' none');
     target.textContent = next.target
@@ -987,11 +1354,10 @@
 
     $('show-terminal').setAttribute('aria-pressed', next.showInTerminal ? 'true' : 'false');
     modeBox.value = next.mode;
-    modeBox.classList.toggle('auto', next.mode === 'auto');
+    showMode(next.mode);
 
     const current = next.providers.find((p) => p.id === next.provider);
-    const model = current ? (current.model || current.defaultModel) : '';
-    $('provider').textContent = current ? current.label.replace(/\s*\(.*\)$/, '') + (model ? ' · ' + model : '') : '';
+    showProviderLabel(next);
 
     sendBtn.classList.toggle('stop', next.busy);
     setWorking(next.busy, next.busySince);
@@ -1007,10 +1373,11 @@
       : '<svg viewBox="0 0 16 16"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"/></svg>';
 
     let warning = '';
-    if (current && current.id === 'claude-code' && next.claude && !next.claude.installed) warning = 'O Claude Code não está instalado. Abra as configurações (botão de ajustes) para instalar ou escolher outro provedor.';
-    else if (current && current.id === 'claude-code' && next.claude && !next.claude.loggedIn) warning = 'Falta entrar com a conta Claude. Abra as configurações (botão de ajustes).';
-    else if (current && current.needsKey && !current.hasKey) warning = 'Falta a chave de API de ' + current.label + '. Abra as configurações (botão de ajustes).';
+    if (current && current.id === 'claude-code' && next.claude && !next.claude.installed) warning = 'O Claude Code não está instalado. Clique aqui para instalar ou escolher outro provedor.';
+    else if (current && current.id === 'claude-code' && next.claude && !next.claude.loggedIn) warning = 'Falta entrar com a conta Claude. Clique aqui para entrar.';
+    else if (current && current.needsKey && !current.hasKey) warning = 'Falta a chave de API de ' + current.label + '. Clique aqui para informar.';
     banner.hidden = !warning;
+    banner.classList.toggle('action', !!warning);
     banner.textContent = warning;
 
     if (!settings.hidden) renderProviders();
@@ -1028,11 +1395,27 @@
         scrollDown();
         break;
       case 'confirmDone': onConfirmDone(msg); break;
+      case 'runbook':
+        $('memory-state').className = 'status';
+        $('memory-state').textContent = msg.text || '';
+        break;
       case 'memory':
+        if (document.activeElement !== $('rules-text')) $('rules-text').value = fieldText(msg.general);
+        if (document.activeElement !== $('blocked-text')) $('blocked-text').value = fieldText(msg.blocked);
+        // Trocou de servidor: os campos do servidor são substituídos mesmo com o cursor neles, para o
+        // texto de um nunca ser salvo no outro.
+        const otherServer = (msg.server || '') !== memoryServer;
+        memoryServer = msg.server || '';
+        if (otherServer || document.activeElement !== $('server-blocked-text')) $('server-blocked-text').value = fieldText(msg.serverBlocked);
+        $('scope-server').disabled = !msg.available;
+        if (!msg.available && presetScope === 'server') presetScope = 'general';
+        $('scope-server').textContent = msg.available ? 'Só ' + (msg.server || 'este servidor') : 'Só este servidor';
         $('memory').hidden = !msg.available;
-        $('memory-title').textContent = 'Anotações de ' + (msg.server || 'este servidor');
-        if (document.activeElement !== $('memory-text') || $('memory-state').textContent === 'Salvando...') $('memory-text').value = msg.text || '';
-        if ($('memory-state').textContent === 'Salvando...') { $('memory-state').className = 'status ok'; $('memory-state').textContent = 'Salvo.'; }
+        $('memory-title').textContent = 'Regras e anotações de ' + (msg.server || 'este servidor');
+        if (otherServer || document.activeElement !== $('memory-text') || $('memory-state').textContent === 'Salvando...') $('memory-text').value = fieldText(msg.text);
+        if (otherServer) $('memory-state').textContent = '';
+        if ($('memory-state').textContent === 'Salvando...') { $('memory-state').className = 'status ok'; $('memory-state').textContent = 'Salvo. Já vale para as próximas mensagens.'; }
+        setPresetScope(presetScope, true);
         break;
       case 'history':
         historyItems = msg.items || [];
@@ -1064,10 +1447,18 @@
       case 'models':
         loading[msg.provider] = false;
         if (msg.error) delete modelLists[msg.provider]; else modelLists[msg.provider] = msg.items || [];
+        modelInfo[msg.provider] = { labels: msg.labels, more: msg.more, efforts: msg.efforts, defaultLabel: msg.defaultLabel };
         (drafts[msg.provider] || (drafts[msg.provider] = {})).modelsError = msg.error
           ? 'Não foi possível buscar os modelos: ' + msg.error
+          : msg.note ? msg.note
           : (msg.items && msg.items.length ? '' : 'O provedor não devolveu nenhum modelo. Use "Digitar outro nome...".');
         if (!settings.hidden) renderProviders();
+        if (!modelMenu.hidden) renderModelMenu();
+        showProviderLabel(state);
+        break;
+      case 'rulesSaved':
+        $('rules-state').className = 'status ok';
+        $('rules-state').textContent = 'Salvo. Já vale para as próximas mensagens.';
         break;
       case 'appTheme':
         for (const [name, value] of Object.entries(msg.vars || {})) document.documentElement.style.setProperty(name, value);

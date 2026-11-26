@@ -1624,7 +1624,7 @@ function runMenuAction(action, arg) {
       if (term && term.term.hasSelection()) send({ type: 'copy', text: term.term.getSelection() });
       break;
     case 'paste': if (term) requestPaste(term); break;
-    case 'selectAll': if (term) term.term.selectAll(); break;
+    case 'selectAll': if (term) selectTerminalText(term); break;
     case 'clear': if (term) term.term.clear(); break;
     case 'search': openSearch(); return;
     case 'splitV': splitActive('v'); break;

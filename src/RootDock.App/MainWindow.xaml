@@ -413,7 +413,7 @@
             <!-- Assistente: chat de IA que age na sessão SSH em foco (lado direito, recolhível) -->
             <!-- Arrastar muda a largura do assistente tirando do terminal (um GridSplitter mexeria na coluna dos comandos, ao lado) -->
             <Thumb Grid.Column="5" x:Name="AssistantSplitter" Width="5" Cursor="SizeWE" Visibility="Collapsed"
-                   DragDelta="OnAssistantSplitterDrag" DragCompleted="OnAssistantSplitterDone" MouseDoubleClick="OnAssistantSplitterReset"
+                   DragStarted="OnAssistantSplitterStart" DragDelta="OnAssistantSplitterDrag" DragCompleted="OnAssistantSplitterDone" MouseDoubleClick="OnAssistantSplitterReset"
                    ToolTip="Arraste para alargar ou estreitar o assistente (dois cliques: largura padrão)">
                 <Thumb.Template>
                     <ControlTemplate TargetType="Thumb">

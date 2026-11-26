@@ -23,6 +23,11 @@ public partial class MainWindow
         _assistant = new AssistantService(Dispatcher, _workspace, _settings.Assistant, SaveSettings, _vault, _paths.DataDirectory)
         {
             Macros = new AssistantMacroBook(this),
+            // Depois que a mensagem da página terminar de ser tratada: a janela da imagem é modal.
+            ShowImage = (bytes, menu) => Dispatcher.BeginInvoke(() =>
+            {
+                _ = menu ? Dialogs.ImageViewerWindow.ShowMenu(this, bytes) : Dialogs.ImageViewerWindow.Show(this, bytes);
+            }),
         };
         _assistant.CloseRequested += () => SetAssistantPanel(false);
         _workspace.AssistantToggleRequested += () => SetAssistantPanel(!IsAssistantPanelOpen);
@@ -127,11 +132,43 @@ public partial class MainWindow
         return Math.Clamp(wanted, AssistantMinWidth, Math.Max(AssistantMinWidth, room));
     }
 
+    // Arrasto do divisor. A largura sai sempre da posição do mouse na janela em relação ao ponto
+    // onde o arrasto começou: o deslocamento que o Thumb informa é medido a partir dele mesmo, e ele
+    // anda junto com o painel, o que fazia a largura oscilar. A nova largura é aplicada uma vez por
+    // quadro de tela, para os dois WebView2 (terminal e assistente) não receberem redimensionamentos
+    // intermediários que nem chegam a ser desenhados.
+    private double _assistantDragStartWidth;
+    private double _assistantDragStartX;
+    private double? _assistantDragWanted;
+
+    private void OnAssistantSplitterStart(object sender, System.Windows.Controls.Primitives.DragStartedEventArgs e)
+    {
+        _assistantDragStartWidth = AssistantColumn.ActualWidth;
+        _assistantDragStartX = System.Windows.Input.Mouse.GetPosition(this).X;
+        _assistantDragWanted = null;
+        System.Windows.Media.CompositionTarget.Rendering += OnAssistantSplitterFrame;
+    }
+
     private void OnAssistantSplitterDrag(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e) =>
-        AssistantColumn.Width = new GridLength(ClampAssistantWidth(AssistantColumn.ActualWidth - e.HorizontalChange));
+        _assistantDragWanted = ClampAssistantWidth(_assistantDragStartWidth - (System.Windows.Input.Mouse.GetPosition(this).X - _assistantDragStartX));
+
+    private void OnAssistantSplitterFrame(object? sender, EventArgs e)
+    {
+        if (_assistantDragWanted is { } wanted)
+        {
+            _assistantDragWanted = null;
+            if (Math.Abs(AssistantColumn.Width.Value - wanted) >= 0.5)
+            {
+                AssistantColumn.Width = new GridLength(wanted);
+            }
+        }
+    }
 
     private void OnAssistantSplitterDone(object sender, EventArgs e)
     {
+        System.Windows.Media.CompositionTarget.Rendering -= OnAssistantSplitterFrame;
+        OnAssistantSplitterFrame(null, EventArgs.Empty); // a última posição do mouse
+        UpdateLayout();
         RememberAssistantWidth();
         SaveSettings();
     }

@@ -60,11 +60,19 @@ public sealed partial class AssistantService : IDisposable
     private readonly string _workDirectory;
     private readonly AssistantHistoryStore _history;
     private readonly AssistantMemoryStore _memory;
+    private readonly AssistantRunbookStore _runbook;
+    private readonly AssistantImageStore _images;
     private readonly AssistantCheckpointStore _checkpoints;
     private readonly Dictionary<TerminalSession, Conversation> _conversations = [];
 
     private Conversation? _shown;
     private ClaudeCodeStatus? _claudeStatus;
+
+    /// <summary>
+    /// Mostra uma imagem do chat: em tamanho grande sobre a janela (menu = false) ou só o menu de
+    /// copiar e salvar na posição do mouse (menu = true). A janela principal é quem sabe fazer.
+    /// </summary>
+    public Action<byte[], bool>? ShowImage { get; init; }
 
     /// <summary>As macros do RootDock, para o assistente listar e criar (a janela principal é quem as guarda).</summary>
     public IAssistantMacroBook? Macros { get; init; }
@@ -79,6 +87,8 @@ public sealed partial class AssistantService : IDisposable
         _workDirectory = Path.Combine(dataDirectory, "assistant");
         _history = new AssistantHistoryStore(Path.Combine(_workDirectory, "history"));
         _memory = new AssistantMemoryStore(Path.Combine(_workDirectory, "memory"));
+        _runbook = new AssistantRunbookStore(Path.Combine(_workDirectory, "runbook"));
+        _images = new AssistantImageStore(Path.Combine(_workDirectory, "images"));
         _checkpoints = new AssistantCheckpointStore(Path.Combine(_workDirectory, "checkpoints"));
         workspace.ActiveSessionChanged += _ => Sync();
         workspace.SessionsChanged += Sync;
@@ -249,13 +259,84 @@ public sealed partial class AssistantService : IDisposable
                 try
                 {
                     _memory.Write(Conversation.ServerKey(owner.Session), notes);
+                    if (Text(message, "blocked") is { } serverBlocked)
+                    {
+                        _memory.Write(AssistantRules.ServerBlockedKey(Conversation.ServerKey(owner.Session)), serverBlocked);
+                    }
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
                     Send(new { type = "error", text = "Não foi possível gravar as anotações: " + ex.Message });
                 }
 
+                RulesChanged();
                 SendMemory();
+                break;
+
+            case "saveRules":
+                try
+                {
+                    if (Text(message, "general") is { } general)
+                    {
+                        _memory.Write(AssistantRules.GeneralKey, general);
+                    }
+
+                    if (Text(message, "blocked") is { } blocked)
+                    {
+                        _memory.Write(AssistantRules.BlockedKey, blocked);
+                    }
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    Send(new { type = "error", text = "Não foi possível gravar as regras: " + ex.Message });
+                }
+
+                RulesChanged();
+                SendMemory();
+                Send(new { type = "rulesSaved" });
+                break;
+
+            case "viewImage" or "imageMenu":
+                // A imagem inteira está guardada pelo id; sem ela (conversa antiga), vale a miniatura que a página mandou.
+                var picture = _images.Load(Text(message, "id"));
+                if (picture is null && Text(message, "src") is { Length: <= 8_000_000 } source &&
+                    source.StartsWith("data:image/", StringComparison.Ordinal) && source.IndexOf(";base64,", StringComparison.Ordinal) is > 0 and var comma)
+                {
+                    try
+                    {
+                        picture = Convert.FromBase64String(source[(comma + 8)..]);
+                    }
+                    catch (FormatException)
+                    {
+                        picture = null;
+                    }
+                }
+
+                if (picture is not null)
+                {
+                    ShowImage?.Invoke(picture, Text(message, "type") == "imageMenu");
+                }
+
+                break;
+
+            case "openRunbook" when _shown is { } shown:
+                try
+                {
+                    var file = _runbook.PathOf(Conversation.ServerKey(shown.Session));
+                    if (File.Exists(file))
+                    {
+                        Process.Start(new ProcessStartInfo(file) { UseShellExecute = true })?.Dispose();
+                    }
+                    else
+                    {
+                        Send(new { type = "runbook", text = "Ainda não há diário deste servidor: ele começa quando a IA executar algo aqui." });
+                    }
+                }
+                catch (Exception ex) when (ex is Win32Exception or IOException or InvalidOperationException)
+                {
+                    Send(new { type = "runbook", text = "Não foi possível abrir o diário: " + ex.Message });
+                }
+
                 break;
 
             case "openHistory" when Text(message, "id") is { } id && _shown is { } target:
@@ -370,9 +451,29 @@ public sealed partial class AssistantService : IDisposable
 
     /// <summary>As anotações permanentes do servidor da aba em foco, para a tela de configurações.</summary>
     private void SendMemory() =>
-        Send(_shown is { } conversation
-            ? new { type = "memory", server = conversation.Session.Entry.Name, text = _memory.Read(Conversation.ServerKey(conversation.Session)), available = true }
-            : new { type = "memory", server = "", text = "", available = false });
+        Send(new
+        {
+            type = "memory",
+            server = _shown?.Session.Entry.Name ?? "",
+            text = _shown is { } conversation ? _memory.Read(Conversation.ServerKey(conversation.Session)) : "",
+            available = _shown is not null,
+            general = _memory.Read(AssistantRules.GeneralKey),
+            blocked = _memory.Read(AssistantRules.BlockedKey),
+            serverBlocked = _shown is { } shown ? _memory.Read(AssistantRules.ServerBlockedKey(Conversation.ServerKey(shown.Session))) : "",
+        });
+
+    /// <summary>Os bloqueios da pessoa (uma linha cada), para o executor de ferramentas conferir.</summary>
+    private IReadOnlyList<string> BlockedPatterns(string server) => AssistantRules.ParseBlocked(
+        _memory.Read(AssistantRules.BlockedKey) + "\n" + _memory.Read(AssistantRules.ServerBlockedKey(server)));
+
+    /// <summary>As regras mudaram: cada conversa passa a valer com as novas (o Claude Code recebe as instruções ao iniciar).</summary>
+    private void RulesChanged()
+    {
+        foreach (var conversation in _conversations.Values)
+        {
+            conversation.OptionsChanged();
+        }
+    }
 
     /// <summary>As conversas guardadas do servidor da aba em foco, para o botão de histórico.</summary>
     private void SendHistory()
@@ -425,6 +526,13 @@ public sealed partial class AssistantService : IDisposable
             changed = true;
         }
 
+        if (provider == ClaudeCode && Text(message, "effort") is { } effort && _settings.ClaudeEffort != effort.Trim() &&
+            effort.Trim() is "" or "low" or "medium" or "high" or "xhigh" or "max")
+        {
+            _settings.ClaudeEffort = effort.Trim();
+            changed = true;
+        }
+
         if (provider == Custom && Text(message, "baseUrl") is { } baseUrl && _settings.CustomBaseUrl != baseUrl.Trim())
         {
             _settings.CustomBaseUrl = baseUrl.Trim();
@@ -467,7 +575,7 @@ public sealed partial class AssistantService : IDisposable
         var key = ReadKey(provider.Id);
         if (provider.NeedsKey && string.IsNullOrEmpty(key))
         {
-            throw new ChatModelException($"Falta a chave de API de {provider.Label}. Abra as configurações do assistente (botão de ajustes) e informe a chave.");
+            throw new ChatModelException($"Falta a chave de API de {provider.Label}. Abra \"Trocar de provedor ou chave...\" no botão do modelo, abaixo do campo de mensagem, e informe a chave.");
         }
 
         if (provider.Id == Anthropic)
@@ -483,7 +591,7 @@ public sealed partial class AssistantService : IDisposable
 
         if (model.Length == 0)
         {
-            throw new ChatModelException($"Escolha o modelo de {provider.Label} nas configurações do assistente (botão de ajustes).");
+            throw new ChatModelException($"Escolha o modelo de {provider.Label} no botão do modelo, abaixo do campo de mensagem.");
         }
 
         return new OpenAiChatModel(Http, baseUrl, key ?? "", model);
@@ -493,13 +601,14 @@ public sealed partial class AssistantService : IDisposable
         "Você é o assistente do RootDock, um cliente SSH para Windows. A pessoa administra servidores e desenvolve sistemas " +
         "neles, e você age no servidor da sessão SSH desta conversa usando as ferramentas: run_command, read_terminal e " +
         "type_in_terminal (o terminal que ela está vendo); read_file, write_file, edit_file, list_directory (arquivos por SFTP); " +
-        "search_files e find_files (busca no código); remember (anotações permanentes deste servidor); update_tasks (a lista " +
+        "search_files e find_files (busca no código); remember (anotações permanentes deste servidor; o RootDock também mantém " +
+        "sozinho um diário do que você executa aqui e mostra o fim dele no começo de cada conversa); update_tasks (a lista " +
         "de tarefas que ela acompanha na tela); list_macros e save_macro (as macros do RootDock: rotinas de comandos que ela " +
         "executa com um clique em qualquer sessão; crie uma quando ela pedir um procedimento para repetir); e busca na web e leitura de páginas (web_search e web_fetch, ou WebSearch e " +
         "WebFetch, conforme o que estiver disponível), para documentação e erros. " +
         "Ela pode anexar imagens (prints de tela) às mensagens. " +
-        "Você não tem acesso ao computador dela, só ao servidor. Os dados do servidor, as anotações permanentes e as instruções " +
-        "do projeto (CLAUDE.md ou AGENTS.md na pasta do terminal) vêm no começo da conversa.\n\n" +
+        "Você não tem acesso ao computador dela, só ao servidor. Os dados do servidor e as instruções do projeto " +
+        "(CLAUDE.md ou AGENTS.md na pasta do terminal) vêm no começo da conversa; as regras da pessoa, no fim destas instruções.\n\n" +
         "Responda sempre em português do Brasil, direto ao ponto. Antes de mudar algo, investigue o suficiente para saber o que " +
         "está mudando; depois de mudar, confira que funcionou. Nunca coloque senhas ou tokens em arquivos ou comandos. " +
         "Se a pessoa recusar uma ação na tela, não tente por outro caminho. Comando demorado não é problema: espere terminar.\n\n" +
@@ -594,6 +703,7 @@ public sealed partial class AssistantService : IDisposable
                 needsKey = p.NeedsKey,
                 hasKey = p.Id != ClaudeCode && ReadKey(p.Id) is { Length: > 0 },
                 model = _settings.Models.GetValueOrDefault(p.Id, ""),
+                effort = p.Id == ClaudeCode ? _settings.ClaudeEffort : "",
                 defaultModel = p.Id == Anthropic ? AnthropicChatModel.DefaultModel : "",
                 custom = p.Id == Custom,
             }),
@@ -621,7 +731,34 @@ public sealed partial class AssistantService : IDisposable
             IReadOnlyList<string> items;
             if (providerId == ClaudeCode)
             {
-                items = ["opus", "sonnet", "haiku"]; // apelidos do próprio Claude Code (vazio = o padrão da conta)
+                // A lista é a do próprio Claude Code para esta conta, como no seletor do VS Code.
+                IReadOnlyList<ClaudeCodeModel> models;
+                string? note = null;
+                try
+                {
+                    models = await Task.Run(() => ClaudeCodeSession.ListModelsAsync(CancellationToken.None));
+                }
+                catch (ChatModelException ex)
+                {
+                    models = ClaudeCodeSession.FallbackModels;
+                    note = ex.Message + " Mostrando só os apelidos básicos.";
+                }
+
+                var standard = models.FirstOrDefault(m => m.Value == "default");
+                var listed = models.Where(m => m.Value != "default").ToList();
+                Send(new
+                {
+                    type = "models",
+                    provider = providerId,
+                    items = listed.Select(m => m.Value),
+                    labels = listed.ToDictionary(m => m.Value, m => m.Label),
+                    // Apelidos (opus, fable...) acompanham a versão mais nova; nomes completos ficam em "Mais modelos".
+                    more = listed.Where(m => m.Value.StartsWith("claude-", StringComparison.OrdinalIgnoreCase)).Select(m => m.Value),
+                    efforts = models.ToDictionary(m => m.Value == "default" ? "" : m.Value, m => m.Efforts),
+                    defaultLabel = standard is null ? null : models.FirstOrDefault(m => m.Value != "default" && m.Resolved == standard.Resolved)?.Label ?? standard.Resolved,
+                    note,
+                });
+                return;
             }
             else if (providerId == Anthropic)
             {
@@ -768,7 +905,7 @@ public sealed partial class AssistantService : IDisposable
                     }
                 },
                 tasks => Emit(new { type = "tasks", items = tasks.Select(t => new { title = t.Title, status = t.Status }) }));
-            _runner = new AssistantToolRunner(new AssistantTools(_host, Web, owner.Macros), this) { Mode = owner.Mode };
+            _runner = new AssistantToolRunner(new AssistantTools(_host, Web, owner.Macros), this) { Mode = owner.Mode, Blocked = () => owner.BlockedPatterns(ServerKey(session)) };
         }
 
         public TerminalSession Session { get; }
@@ -1070,6 +1207,14 @@ public sealed partial class AssistantService : IDisposable
                 _changes.Clear();
             }
 
+            var began = DateTime.Now;
+            var finished = false;
+            lock (_turnActions)
+            {
+                _turnActions.Clear();
+                _turnAnswer.Clear();
+            }
+
             if (retry)
             {
                 Emit(new { type = "note", text = "Tentando novamente." });
@@ -1077,7 +1222,7 @@ public sealed partial class AssistantService : IDisposable
             else
             {
                 Emit(attached.Count > 0
-                    ? new { type = "user", text, images = attached.Select(a => a.Thumb).ToArray() }
+                    ? new { type = "user", text, images = attached.Select(a => a.Thumb).ToArray(), ids = attached.Select(a => _owner._images.Save(a.Image) ?? "").ToArray() }
                     : (object)new { type = "user", text });
             }
 
@@ -1120,12 +1265,15 @@ public sealed partial class AssistantService : IDisposable
                     _undoNote = null;
                 }
 
-                var system = _owner.SystemPrompt();
+                // As regras da pessoa vão nas instruções (e não no começo da conversa): assim continuam
+                // valendo depois que a conversa é resumida.
+                var system = _owner.SystemPrompt() + AssistantRules.Section(
+                    _owner._memory.Read(AssistantRules.GeneralKey), _owner._memory.Read(ServerKey(Session)), Session.Entry.Name, _owner.BlockedPatterns(ServerKey(Session)));
                 if (_owner.Provider.Id == ClaudeCode)
                 {
                     var claude = _claude ??= new ClaudeCodeSession(
-                        ClaudeCodeSession.Find() ?? throw new ChatModelException("O Claude Code não está instalado nesta máquina. Abra as configurações do assistente para instalar."),
-                        _owner._workDirectory, _owner._settings.Models.GetValueOrDefault(ClaudeCode), _runner, this);
+                        ClaudeCodeSession.Find() ?? throw new ChatModelException("O Claude Code não está instalado nesta máquina. Abra \"Trocar de provedor ou chave...\" no botão do modelo, abaixo do campo de mensagem, para instalar."),
+                        _owner._workDirectory, _owner._settings.Models.GetValueOrDefault(ClaudeCode), _runner, this, _owner._settings.ClaudeEffort);
                     await Task.Run(() => claude.SendAsync(system, full, images, ct), ct);
                 }
                 else
@@ -1133,6 +1281,8 @@ public sealed partial class AssistantService : IDisposable
                     var agent = _agent ??= new AssistantAgent(_owner.CreateModel(), _runner, this);
                     await Task.Run(() => agent.SendAsync(system, full, images, ct), ct);
                 }
+
+                finished = true;
             }
             catch (OperationCanceledException)
             {
@@ -1174,6 +1324,7 @@ public sealed partial class AssistantService : IDisposable
                 }
 
                 Busy = false;
+                WriteRunbook(began, text, finished);
                 RecordChanges();
                 Emit(new { type = "done" });
                 _ = _owner._dispatcher.BeginInvoke(Save); // depois do "done" entrar no registro
@@ -1217,12 +1368,12 @@ public sealed partial class AssistantService : IDisposable
         private async Task<string> IntroductionAsync(CancellationToken ct)
         {
             var text = new StringBuilder();
-            var memory = _owner._memory.Read(ServerKey(Session)).Trim();
-            if (memory.Length > 0)
+            var diary = _owner._runbook.Tail(ServerKey(Session), RunbookIntroChars);
+            if (diary.Length > 0)
             {
-                text.Append("[Anotações permanentes deste servidor (guardadas no RootDock; acrescente com a ferramenta remember)]\n")
-                    .Append(memory.Length > AssistantMemoryStore.MaxChars ? memory[..AssistantMemoryStore.MaxChars] + "\n[...]" : memory)
-                    .Append("\n\n");
+                text.Append("[Diário do RootDock: o que o assistente já executou neste servidor em conversas anteriores, do mais antigo ao mais ")
+                    .Append("recente. É um registro automático e resumido; o estado do servidor pode ter mudado desde então, confira antes de assumir.]\n")
+                    .Append(diary).Append("\n\n");
             }
 
             if (Session.TerminalDirectory is { Length: > 0 } directory)
@@ -1252,13 +1403,84 @@ public sealed partial class AssistantService : IDisposable
 
         // ---------- Acompanhamento (chamado de threads de trabalho) ----------
 
-        void IAssistantObserver.Text(string delta) => Record(null, delta);
+        void IAssistantObserver.Text(string delta)
+        {
+            lock (_turnActions)
+            {
+                if (_turnAnswer.Length < 4000)
+                {
+                    _turnAnswer.Append(delta);
+                }
+            }
 
-        void IAssistantObserver.ToolStarted(ToolCall call, string summary) =>
+            Record(null, delta);
+        }
+
+        void IAssistantObserver.ToolStarted(ToolCall call, string summary)
+        {
+            lock (_turnActions)
+            {
+                _turnAnswer.Clear(); // o "resultado" do diário é o texto depois da última ação
+            }
+
             Emit(new { type = "tool", id = call.Id, name = call.Name, summary, start = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() });
+        }
 
-        void IAssistantObserver.ToolFinished(ToolCall call, ToolResult result) =>
+        void IAssistantObserver.ToolFinished(ToolCall call, ToolResult result)
+        {
+            // Para o diário entra o que age no servidor ou no RootDock; leitura e busca ficam de fora.
+            var what = call.Name switch
+            {
+                AssistantTools.RunCommand => "comando: " + AssistantService.Text(call.Input, "command"),
+                AssistantTools.TypeInTerminal => "digitou no terminal: " + AssistantService.Text(call.Input, "text"),
+                AssistantTools.WriteFile => "gravou o arquivo " + AssistantService.Text(call.Input, "path"),
+                AssistantTools.EditFile => "editou o arquivo " + AssistantService.Text(call.Input, "path"),
+                AssistantTools.SaveMacro => "salvou a macro \"" + AssistantService.Text(call.Input, "name") + "\" no RootDock",
+                AssistantTools.RememberTool => "anotou: " + AssistantService.Text(call.Input, "note"),
+                _ => null,
+            };
+            if (what is not null)
+            {
+                // Recusado pela pessoa ou bloqueado pelas regras não é "falhou": não chegou a rodar.
+                var skipped = result.IsError && (result.Content.StartsWith("A pessoa não autorizou", StringComparison.Ordinal) ||
+                                                 result.Content.StartsWith("Bloqueado pelas regras", StringComparison.Ordinal));
+                lock (_turnActions)
+                {
+                    _turnActions.Add(new AssistantRunbookStore.Action(skipped ? what + " (não executado: recusado ou bloqueado)" : what, skipped || !result.IsError));
+                }
+            }
+
             Emit(new { type = "toolEnd", id = call.Id, ok = !result.IsError, output = result.Content.Length > 20_000 ? result.Content[..20_000] + "\n[...]" : result.Content });
+        }
+
+        /// <summary>Quanto do diário do servidor entra em cada conversa nova.</summary>
+        private const int RunbookIntroChars = 6000;
+
+        private readonly List<AssistantRunbookStore.Action> _turnActions = [];
+        private readonly StringBuilder _turnAnswer = new();
+
+        /// <summary>Fim da rodada: o que foi executado vai para o diário do servidor.</summary>
+        private void WriteRunbook(DateTime began, string request, bool finished)
+        {
+            List<AssistantRunbookStore.Action> actions;
+            string outcome;
+            lock (_turnActions)
+            {
+                actions = [.. _turnActions];
+                outcome = _turnAnswer.ToString();
+                _turnActions.Clear();
+                _turnAnswer.Clear();
+            }
+
+            try
+            {
+                _owner._runbook.Append(ServerKey(Session), began, request, actions, outcome, finished);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Log.Error("Assistente: gravar o diário", ex);
+            }
+        }
 
         void IAssistantObserver.Note(string text) => Emit(new { type = "note", text });
 
