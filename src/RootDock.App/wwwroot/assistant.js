@@ -914,6 +914,11 @@
     head.className = 'mode-menu-head';
     head.textContent = 'Modelo · ' + p.label.replace(/\s*\(.*\)$/, '');
     modelMenu.appendChild(head);
+    const list = document.createElement('div');
+    list.className = 'model-list';
+    const foot = document.createElement('div');
+    foot.className = 'model-foot';
+    modelMenu.append(list, foot);
     const info = modelInfo[p.id] || {};
     const labels = info.labels || {};
     const more = info.more || [];
@@ -927,10 +932,10 @@
       b.innerHTML = '<span class="mode-item-text"><span class="mode-item-name"></span></span><svg class="mode-item-check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>';
       b.querySelector('.mode-item-name').textContent = label;
       b.addEventListener('click', () => { toggleModelMenu(false); if (value !== current) send({ type: 'saveProvider', id: p.id, model: value }); input.focus(); });
-      modelMenu.appendChild(b);
+      list.appendChild(b);
     };
-    const note = (text) => { const n = document.createElement('div'); n.className = 'model-note'; n.textContent = text; modelMenu.appendChild(n); };
-    const sep = () => { const d = document.createElement('div'); d.className = 'model-sep'; modelMenu.appendChild(d); };
+    const note = (text) => { const n = document.createElement('div'); n.className = 'model-note'; n.textContent = text; list.appendChild(n); };
+    const sep = (where) => { const d = document.createElement('div'); d.className = 'model-sep'; (where || list).appendChild(d); };
     if (loading[p.id] || (!items && requested[p.id])) note('Carregando os modelos...');
     else if (!items) note('Informe a chave em "Trocar de provedor ou chave..." para ver os modelos.');
     else {
@@ -946,14 +951,13 @@
           b.className = 'mode-item';
           b.innerHTML = '<span class="mode-item-text"><span class="mode-item-name">Mais modelos</span></span><svg class="mode-item-check" style="visibility:visible" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg>';
           b.addEventListener('click', (e) => { e.stopPropagation(); modelMoreOpen = true; renderModelMenu(); });
-          modelMenu.appendChild(b);
+          list.appendChild(b);
         }
       }
       if (p.id === 'claude-code') {
         const names = { low: 'Baixo', medium: 'Médio', high: 'Alto', xhigh: 'Muito alto', max: 'Máximo' };
         const levels = (info.efforts || {})[current] || Object.keys(names);
         if (levels.length) {
-          sep();
           const row = document.createElement('label');
           row.className = 'model-effort';
           const text = document.createElement('span');
@@ -966,16 +970,18 @@
           effort.addEventListener('click', (e) => e.stopPropagation());
           effort.addEventListener('change', () => send({ type: 'saveProvider', id: p.id, effort: effort.value }));
           row.append(text, effort);
-          modelMenu.appendChild(row);
+          foot.appendChild(row);
         }
       }
     }
-    sep();
     const other = document.createElement('button');
-    other.className = 'mode-item';
-    other.innerHTML = '<span class="mode-item-text"><span class="mode-item-name">Trocar de provedor ou chave...</span></span>';
+    other.className = 'mode-item model-switch';
+    other.innerHTML = '<svg class="mode-item-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 5.5h9M9 3l2.5 2.5L9 8M13.5 10.5h-9M7 8l-2.5 2.5L7 13"/></svg><span class="mode-item-text"><span class="mode-item-name">Trocar de provedor ou chave...</span></span>';
     other.addEventListener('click', () => { toggleModelMenu(false); openSettings('providers'); });
-    modelMenu.appendChild(other);
+    foot.appendChild(other);
+    // Abre com o modelo em uso à vista, mesmo numa lista longa.
+    const chosen = list.querySelector('.mode-item.selected');
+    if (chosen) list.scrollTop = Math.max(0, chosen.offsetTop - list.clientHeight / 2);
   }
   function toggleModelMenu(open) {
     modelMenu.hidden = !open;

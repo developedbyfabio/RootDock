@@ -396,6 +396,7 @@ img.viewable:hover { filter: brightness(1.12); }
 #settings {
   position: absolute;
   inset: 0;
+  z-index: 40;
   display: flex;
   flex-direction: column;
   background: var(--panel);
@@ -405,7 +406,7 @@ img.viewable:hover { filter: brightness(1.12); }
   position: absolute;
   top: 46px;
   right: 10px;
-  z-index: 5;
+  z-index: 35;
   display: flex;
   flex-direction: column;
   width: min(400px, calc(100% - 20px));
@@ -504,7 +505,13 @@ img.viewable:hover { filter: brightness(1.12); }
 .rules-box:focus { border-color: var(--accent); }
 
 /* Menu de modelos do rodapé (mesma família visual do menu de modos). */
-.model-menu { max-height: min(420px, calc(100vh - 160px)); overflow-y: auto; scrollbar-width: thin; }
+.model-menu { display: flex; flex-direction: column; max-height: min(440px, calc(100vh - 150px)); overflow: hidden; }
+.model-list { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; position: relative; }
+.model-foot { flex: none; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+.model-switch { color: var(--text-dim); }
+.model-switch:hover { color: var(--text); }
+.model-switch .mode-item-icon { margin-top: 0; }
+.model-menu .mode-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-menu .mode-item { align-items: center; padding: 6px 8px; }
 .model-menu .mode-item-check { margin-top: 0; }
 .model-menu .mode-item-name { font-weight: 500; }
