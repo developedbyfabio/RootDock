@@ -101,8 +101,10 @@ public partial class MainWindow
 
     private IEnumerable<object> ViewMenu()
     {
-        yield return Toggle("Sessões", SessionsTab.IsChecked == true, () => SessionsTab.IsChecked = true);
-        yield return Toggle("Arquivos", FilesTab.IsChecked == true, () => FilesTab.IsChecked = true);
+        // Escolher uma das abas pelo menu traz a barra de volta, se estiver recolhida.
+        yield return Toggle("Barra lateral", !IsSidebarCollapsed, () => SetSidebarCollapsed(!IsSidebarCollapsed), "Ctrl+Shift+B");
+        yield return Toggle("Sessões", !IsSidebarCollapsed && SessionsTab.IsChecked == true, () => { SetSidebarCollapsed(false); SessionsTab.IsChecked = true; });
+        yield return Toggle("Arquivos", !IsSidebarCollapsed && FilesTab.IsChecked == true, () => { SetSidebarCollapsed(false); FilesTab.IsChecked = true; });
         yield return Toggle("Biblioteca de comandos", IsCommandsPanelOpen, () => SetCommandsPanel(!IsCommandsPanelOpen), "Ctrl+Shift+L");
         yield return Toggle("Assistente (IA)", IsAssistantPanelOpen, () => SetAssistantPanel(!IsAssistantPanelOpen), "Ctrl+Shift+A");
         yield return new Separator();
@@ -241,6 +243,7 @@ public partial class MainWindow
 
     private void FocusSessionSearch()
     {
+        SetSidebarCollapsed(false);
         SessionsTab.IsChecked = true;
         SearchBox.Focus();
         SearchBox.SelectAll();

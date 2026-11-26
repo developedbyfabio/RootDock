@@ -38,6 +38,7 @@ public partial class ShortcutsWindow : FluentWindow
         ]),
         new("Painéis do RootDock",
         [
+            new("Ctrl+Shift+B", "Recolher ou mostrar a barra lateral (sessões e arquivos)"),
             new("Ctrl+Shift+L", "Biblioteca de comandos"),
             new("Ctrl+Shift+H", "Histórico de comandos de todas as sessões"),
             new("Ctrl+F", "Buscar sessões (com a lista em foco)"),

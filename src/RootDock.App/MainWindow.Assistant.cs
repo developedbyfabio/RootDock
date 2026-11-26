@@ -31,14 +31,8 @@ public partial class MainWindow
         };
         _assistant.CloseRequested += () => SetAssistantPanel(false);
         _workspace.AssistantToggleRequested += () => SetAssistantPanel(!IsAssistantPanelOpen);
-        SizeChanged += (_, _) =>
-        {
-            // Janela menor: o assistente cede espaço para o terminal não sumir.
-            if (IsAssistantPanelOpen && AssistantColumn.ActualWidth > ClampAssistantWidth(AssistantColumn.ActualWidth))
-            {
-                AssistantColumn.Width = new GridLength(ClampAssistantWidth(AssistantColumn.ActualWidth));
-            }
-        };
+        _assistantWanted = _settings.Assistant.PanelWidth;
+        SizeChanged += (_, _) => FitAssistantWidth();
         AssistantView.SetTheme(AppThemes.PageMessage(AppThemes.Get(_settings.AppTheme)));
         if (_settings.Assistant.PanelOpen)
         {
@@ -86,7 +80,8 @@ public partial class MainWindow
         if (open)
         {
             AssistantColumn.MinWidth = AssistantMinWidth;
-            AssistantColumn.Width = new GridLength(ClampAssistantWidth(_settings.Assistant.PanelWidth));
+            _assistantWanted = _settings.Assistant.PanelWidth;
+            AssistantColumn.Width = new GridLength(ClampAssistantWidth(_assistantWanted));
             AssistantView.Visibility = Visibility.Visible;
             AssistantSplitter.Visibility = Visibility.Visible;
             _ = StartAssistantAsync(focus);
@@ -122,6 +117,32 @@ public partial class MainWindow
         {
             SetAssistantPanel(false);
             Notify("Não foi possível abrir o assistente: " + ex.Message, true);
+        }
+    }
+
+    /// <summary>
+    /// A largura que a pessoa escolheu para o assistente (arrastando o divisor). A coluna pode ficar
+    /// menor que isso enquanto a janela não tem espaço, mas a escolha não se perde.
+    /// </summary>
+    private double _assistantWanted = AssistantDefaultWidth;
+
+    /// <summary>
+    /// Ajusta o assistente ao espaço de agora: cede quando a janela encolhe (o terminal não some) e
+    /// volta à largura escolhida quando o espaço volta. Sem a volta, levar a janela para um monitor
+    /// com outra escala (a janela passa por tamanhos intermediários no caminho) deixava o chat
+    /// espremido no mínimo até a pessoa arrastar de novo.
+    /// </summary>
+    private void FitAssistantWidth()
+    {
+        if (!IsAssistantPanelOpen)
+        {
+            return;
+        }
+
+        var target = ClampAssistantWidth(_assistantWanted);
+        if (Math.Abs(AssistantColumn.Width.Value - target) >= 0.5)
+        {
+            AssistantColumn.Width = new GridLength(target);
         }
     }
 
@@ -169,6 +190,7 @@ public partial class MainWindow
         System.Windows.Media.CompositionTarget.Rendering -= OnAssistantSplitterFrame;
         OnAssistantSplitterFrame(null, EventArgs.Empty); // a última posição do mouse
         UpdateLayout();
+        _assistantWanted = AssistantColumn.ActualWidth; // a pessoa escolheu esta largura
         RememberAssistantWidth();
         SaveSettings();
     }
@@ -181,9 +203,10 @@ public partial class MainWindow
 
     private void RememberAssistantWidth()
     {
-        if (IsAssistantPanelOpen && AssistantColumn.ActualWidth >= AssistantMinWidth)
+        // Guarda a largura escolhida, e não a de agora (que pode estar cedida a uma janela estreita).
+        if (IsAssistantPanelOpen && _assistantWanted >= AssistantMinWidth)
         {
-            _settings.Assistant.PanelWidth = AssistantColumn.ActualWidth;
+            _settings.Assistant.PanelWidth = _assistantWanted;
         }
     }
 }

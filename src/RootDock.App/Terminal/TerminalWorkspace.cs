@@ -76,6 +76,9 @@ public sealed class TerminalWorkspace
     /// <summary>Botão/atalho da biblioteca de comandos (canto superior direito do terminal).</summary>
     public event Action? CommandsToggleRequested;
 
+    /// <summary>Ctrl+Shift+B com o foco no terminal: recolher ou mostrar a barra lateral.</summary>
+    public event Action? SidebarToggleRequested;
+
     /// <summary>Botão ou atalho do assistente (Ctrl+Shift+A) na página dos terminais.</summary>
     public event Action? AssistantToggleRequested;
 
@@ -809,6 +812,10 @@ public sealed class TerminalWorkspace
 
             case "toggleCommands":
                 CommandsToggleRequested?.Invoke();
+                break;
+
+            case "toggleSidebar":
+                SidebarToggleRequested?.Invoke();
                 break;
 
             case "toggleAssistant":

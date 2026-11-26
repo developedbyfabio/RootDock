@@ -1566,6 +1566,7 @@ function handleTerminalKey(e, pane) {
       case 'k': send({ type: 'command', name: 'quickConnect' }); return done();
       case 'h': send({ type: 'command', name: 'history' }); return done();
       case 'l': send({ type: 'toggleCommands' }); return done();
+      case 'b': send({ type: 'toggleSidebar' }); return done();
       case 'a': send({ type: 'toggleAssistant' }); return done();
       case 'Tab': cycleTab(-1); return done();
       default: break;
@@ -1609,6 +1610,7 @@ document.addEventListener('keydown', (e) => {
     if (key === 't') { e.preventDefault(); send({ type: 'newLocal' }); }
     else if (key === 'k') { e.preventDefault(); send({ type: 'command', name: 'quickConnect' }); }
     else if (key === 'l') { e.preventDefault(); send({ type: 'toggleCommands' }); }
+    else if (key === 'b') { e.preventDefault(); send({ type: 'toggleSidebar' }); }
     else if (key === 'a') { e.preventDefault(); send({ type: 'toggleAssistant' }); }
     else if (key === 'h') { e.preventDefault(); send({ type: 'command', name: 'history' }); }
   }

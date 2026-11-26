@@ -1014,6 +1014,11 @@ public partial class MainWindow : FluentWindow
                 e.Handled = true;
                 SetCommandsPanel(!IsCommandsPanelOpen);
             }
+            else if (e.Key == Key.B)
+            {
+                e.Handled = true;
+                SetSidebarCollapsed(!IsSidebarCollapsed);
+            }
             else if (e.Key == Key.A && !WebView.IsKeyboardFocusWithin)
             {
                 e.Handled = true;
@@ -1172,6 +1177,8 @@ public partial class MainWindow : FluentWindow
     private void RestorePlacement()
     {
         SidebarColumn.Width = new GridLength(Math.Clamp(_settings.SidebarWidth, 180, SidebarColumn.MaxWidth));
+        _sidebarExpandedWidth = SidebarColumn.Width.Value;
+        SetSidebarCollapsed(_settings.SidebarCollapsed, save: false);
 
         // Primeira abertura: nunca maior que a área útil (telas pequenas ou com escala de 125%/150%).
         var work = SystemParameters.WorkArea;
@@ -1267,7 +1274,7 @@ public partial class MainWindow : FluentWindow
             Height = bounds.Height,
             Maximized = WindowState == WindowState.Maximized,
         };
-        _settings.SidebarWidth = SidebarColumn.ActualWidth;
+        _settings.SidebarWidth = SidebarWidthToRemember();
         RememberWorkspace();
         RememberCommandsWidth();
         RememberAssistantWidth();

@@ -103,6 +103,10 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <StackPanel x:Name="ToolbarLeft" Orientation="Horizontal" HorizontalAlignment="Left">
+                    <!-- Recolhe e mostra a barra lateral; fica sempre aqui, no mesmo lugar -->
+                    <ui:Button x:Name="SidebarToggleButton" Click="OnToggleSidebar" Margin="0,0,6,0" Padding="8,6"
+                               Icon="{ui:SymbolIcon PanelLeftContract20}" ToolTip="Recolher a barra lateral (Ctrl+Shift+B)"
+                               AutomationProperties.Name="Recolher a barra lateral" />
                     <ui:Button Content="Nova sessão" Click="OnNewSession" Margin="0,0,6,0"
                                Icon="{ui:SymbolIcon Add24}" ToolTip="Criar uma sessão SSH salva" />
                     <ui:Button x:Name="LocalShellButton" Content="Terminal local" Click="OnLocalShellMenu" Margin="0,0,12,0"
@@ -129,7 +133,7 @@
             </Grid.ColumnDefinitions>
 
             <!-- Barra lateral: Sessões | Arquivos -->
-            <DockPanel Grid.Column="0" Background="{DynamicResource RdSurface}">
+            <DockPanel Grid.Column="0" x:Name="SidebarPanel" Background="{DynamicResource RdSurface}">
                 <UniformGrid DockPanel.Dock="Top" Columns="2" Margin="8,4,8,0">
                     <RadioButton x:Name="SessionsTab" Style="{StaticResource SideTab}" GroupName="Side" IsChecked="True" Checked="OnSideTabChanged">
                         <StackPanel Orientation="Horizontal">
@@ -397,7 +401,7 @@
                 </Grid>
             </DockPanel>
 
-            <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Stretch" Background="{DynamicResource RdBorder}"
+            <GridSplitter Grid.Column="1" x:Name="SidebarSplitter" Width="4" HorizontalAlignment="Stretch" Background="{DynamicResource RdBorder}"
                           ResizeBehavior="PreviousAndNext" ResizeDirection="Columns" />
 
             <!-- Terminais -->

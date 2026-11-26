@@ -47,6 +47,7 @@ public partial class MainWindow
         CommandsView.RemoveRequested += item => _ = RemoveCustomCommandAsync(item);
         CommandsView.Copied += text => Notify($"Copiado: {text}", false);
         _workspace.CommandsToggleRequested += () => SetCommandsPanel(!IsCommandsPanelOpen);
+        _workspace.SidebarToggleRequested += () => SetSidebarCollapsed(!IsSidebarCollapsed);
         UpdateCommandTarget(null);
     }
 

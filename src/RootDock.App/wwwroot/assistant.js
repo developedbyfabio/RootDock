@@ -79,7 +79,13 @@
         const body = [];
         i++;
         while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) { body.push(lines[i]); i++; }
-        out.push(`<pre><code>${escapeHtml(body.join('\n'))}</code></pre>`);
+        // Bloco para copiar: o que a pessoa vai colar em outro lugar (comando, mensagem, SQL) vem
+        // numa caixa com o botão de copiar, como no Claude Code do VS Code.
+        const lang = line.replace(/^\s*```/, '').trim().split(/\s+/)[0].toLowerCase().replace(/[^a-z0-9+#._-]/g, '').slice(0, 20);
+        const plain = !lang || ['text', 'txt', 'texto', 'mensagem', 'message', 'markdown', 'md', 'plaintext', 'email'].includes(lang);
+        out.push(`<div class="code-box${plain ? ' plain' : ''}"><div class="code-bar"><span class="code-lang">${plain ? '' : escapeHtml(lang)}</span>` +
+          '<button class="code-copy" title="Copiar tudo" aria-label="Copiar tudo"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5v5A1.5 1.5 0 0 0 4 10h1.5"/></svg><span>Copiar</span></button></div>' +
+          `<pre><code>${escapeHtml(body.join('\n'))}</code></pre></div>`);
         continue;
       }
 
@@ -123,6 +129,19 @@
   }
 
   // ---------- Conversa ----------
+
+  // Botão de copiar dos blocos (vale para respostas novas e para conversas reabertas do histórico).
+  messages.addEventListener('click', (e) => {
+    const button = e.target.closest('.code-copy');
+    if (!button) return;
+    const code = button.closest('.code-box')?.querySelector('pre code');
+    if (!code) return;
+    send({ type: 'copy', text: code.textContent });
+    button.classList.add('done');
+    button.querySelector('span').textContent = 'Copiado';
+    clearTimeout(button.copyTimer);
+    button.copyTimer = setTimeout(() => { button.classList.remove('done'); button.querySelector('span').textContent = 'Copiar'; }, 1600);
+  });
 
   const nearBottom = () => chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80;
   const scrollDown = () => { chat.scrollTop = chat.scrollHeight; };

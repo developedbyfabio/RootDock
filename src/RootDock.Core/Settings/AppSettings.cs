@@ -17,6 +17,9 @@ public sealed class AppSettings
 
     public double SidebarWidth { get; set; } = 280;
 
+    /// <summary>A barra lateral (sessões e arquivos) está recolhida.</summary>
+    public bool SidebarCollapsed { get; set; }
+
     /// <summary>Como a lista de sessões é agrupada: Folders, Company ou Environment.</summary>
     public string TreeGrouping { get; set; } = "Folders";
 

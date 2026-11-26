@@ -296,6 +296,11 @@ public sealed partial class AssistantService : IDisposable
                 Send(new { type = "rulesSaved" });
                 break;
 
+            case "copy" when Text(message, "text") is { Length: > 0 and <= 2_000_000 } copied:
+                // Pedido da pessoa (botão de copiar de um bloco da conversa).
+                SafeClipboard.SetText(copied);
+                break;
+
             case "viewImage" or "imageMenu":
                 // A imagem inteira está guardada pelo id; sem ela (conversa antiga), vale a miniatura que a página mandou.
                 var picture = _images.Load(Text(message, "id"));
@@ -609,6 +614,11 @@ public sealed partial class AssistantService : IDisposable
         "Ela pode anexar imagens (prints de tela) às mensagens. " +
         "Você não tem acesso ao computador dela, só ao servidor. Os dados do servidor e as instruções do projeto " +
         "(CLAUDE.md ou AGENTS.md na pasta do terminal) vêm no começo da conversa; as regras da pessoa, no fim destas instruções.\n\n" +
+        "Quando escrever algo para ela copiar e usar em outro lugar (um comando para ela mesma rodar, uma mensagem para mandar a " +
+        "alguém por WhatsApp ou e-mail, um SQL, um trecho de configuração), ponha esse conteúdo sozinho e completo dentro de um " +
+        "bloco de código (três crases), sem comentário seu dentro: a tela mostra cada bloco numa caixa com botão de copiar. Marque " +
+        "o tipo (```bash, ```sql, ```php...) e, para mensagem de texto, use ```text e escreva do jeito que deve ser colado (sem " +
+        "tabelas nem Markdown que o destino não entende). Um bloco por coisa a copiar; a explicação fica fora dele.\n\n" +
         "Responda sempre em português do Brasil, direto ao ponto. Antes de mudar algo, investigue o suficiente para saber o que " +
         "está mudando; depois de mudar, confira que funcionou. Nunca coloque senhas ou tokens em arquivos ou comandos. " +
         "Se a pessoa recusar uma ação na tela, não tente por outro caminho. Comando demorado não é problema: espere terminar.\n\n" +

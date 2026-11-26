@@ -177,6 +177,19 @@ svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width:
   white-space: pre;
 }
 .md pre code { padding: 0; background: none; }
+
+/* Bloco para copiar: barra fina com o tipo e o botão, e o conteúdo embaixo. */
+.code-box { margin: 0 0 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--inset); overflow: hidden; }
+.code-bar { display: flex; align-items: center; min-height: 26px; padding: 0 4px 0 10px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--text) 4%, transparent); }
+.code-lang { flex: 1; color: var(--text-dim); font: 11px "Cascadia Mono", Consolas, monospace; }
+.code-copy { display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 7px; border: 0; border-radius: 5px; background: none; color: var(--text-dim); font-size: 12px; cursor: pointer; }
+.code-copy:hover { background: var(--bg-hover); color: var(--text); }
+.code-copy.done { color: var(--dev); }
+.code-copy svg { width: 13px; height: 13px; }
+.md .code-box pre { margin: 0; border: 0; border-radius: 0; background: none; max-height: 420px; overflow: auto; scrollbar-width: thin; }
+/* Mensagem de texto (para WhatsApp, e-mail...) quebra a linha na largura do painel e usa a fonte da conversa. */
+.md .code-box.plain pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.5; }
+.md .code-box.plain pre code { font: inherit; }
 .md table { border-collapse: collapse; margin: 0 0 8px; display: block; overflow-x: auto; }
 .md th, .md td { padding: 3px 8px; border: 1px solid var(--border); text-align: left; }
 .md blockquote { margin: 0 0 8px; padding-left: 10px; border-left: 3px solid var(--border); color: var(--text-dim); }
