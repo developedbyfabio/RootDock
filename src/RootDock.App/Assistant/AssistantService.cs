@@ -30,6 +30,12 @@ public sealed record AssistantProvider(string Id, string Label, string? BaseUrl,
 public sealed partial class AssistantService : IDisposable
 {
     public const string ClaudeCode = "claude-code";
+
+    /// <summary>Conta ChatGPT, pelo Codex instalado na máquina (o mesmo arranjo da Conta Claude).</summary>
+    public const string Codex = "codex";
+
+    /// <summary>Provedores que usam o login de um programa instalado (sem chave de API no RootDock).</summary>
+    public static bool IsAccount(string id) => id is ClaudeCode or Codex;
     public const string Anthropic = "anthropic";
     public const string Custom = "custom";
 
@@ -38,6 +44,7 @@ public sealed partial class AssistantService : IDisposable
     public static IReadOnlyList<AssistantProvider> Providers { get; } =
     [
         new(ClaudeCode, "Conta Claude (Claude Code)", null, false, "Usa o login da sua conta Claude, como no VS Code. Precisa do Claude Code instalado."),
+        new(Codex, "Conta ChatGPT (Codex)", null, false, "Usa o login da sua conta ChatGPT. Precisa do aplicativo do ChatGPT (Codex) instalado e aberto uma vez."),
         new(Anthropic, "Claude (chave de API)", null, true, "Chave criada em platform.claude.com. Cobrança por uso."),
         new("gemini", "Google Gemini (chave de API)", "https://generativelanguage.googleapis.com/v1beta/openai", true, "Chave criada em aistudio.google.com. Tem plano gratuito."),
         new("openai", "OpenAI (chave de API)", "https://api.openai.com/v1", true, "Chave criada em platform.openai.com."),
@@ -67,6 +74,7 @@ public sealed partial class AssistantService : IDisposable
 
     private Conversation? _shown;
     private ClaudeCodeStatus? _claudeStatus;
+    private CodexStatus? _codexStatus;
 
     /// <summary>
     /// Mostra uma imagem do chat: em tamanho grande sobre a janela (menu = false) ou só o menu de
@@ -371,13 +379,37 @@ public sealed partial class AssistantService : IDisposable
                 break;
 
             case "claudeInstall":
+            case "accountInstall" when Text(message, "id") == ClaudeCode:
                 RunVisible("Instalar o Claude Code", "irm https://claude.ai/install.ps1 | iex");
                 break;
 
             case "claudeLogin":
+            case "accountLogin" when Text(message, "id") == ClaudeCode:
                 if (ClaudeCodeSession.Find() is { } claude)
                 {
                     RunVisible("Entrar no Claude Code", $"& '{claude.Replace("'", "''")}' auth login");
+                }
+
+                break;
+
+            case "accountInstall" when Text(message, "id") == Codex:
+                // O Codex vem com o aplicativo do ChatGPT; a página oficial leva ao instalador certo.
+                try
+                {
+                    Process.Start(new ProcessStartInfo("https://chatgpt.com/codex") { UseShellExecute = true })?.Dispose();
+                    Send(new { type = "note", text = "Instale o aplicativo do ChatGPT (Codex), abra-o uma vez, entre com a sua conta e depois clique em Verificar de novo." });
+                }
+                catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
+                {
+                    Send(new { type = "error", text = "Não foi possível abrir o navegador: " + ex.Message });
+                }
+
+                break;
+
+            case "accountLogin" when Text(message, "id") == Codex:
+                if (CodexSession.Find() is { } codex)
+                {
+                    RunVisible("Entrar no Codex com a conta ChatGPT", $"& '{codex.Replace("'", "''")}' login");
                 }
 
                 break;
@@ -535,6 +567,14 @@ public sealed partial class AssistantService : IDisposable
             effort.Trim() is "" or "low" or "medium" or "high" or "xhigh" or "max")
         {
             _settings.ClaudeEffort = effort.Trim();
+            changed = true;
+        }
+
+        // Os níveis do Codex vêm do catálogo dele (hoje vão até "ultra"); aceita qualquer nome simples.
+        if (provider == Codex && Text(message, "effort")?.Trim() is { Length: <= 16 } codexEffort && _settings.CodexEffort != codexEffort &&
+            codexEffort.All(c => c is >= 'a' and <= 'z'))
+        {
+            _settings.CodexEffort = codexEffort;
             changed = true;
         }
 
@@ -711,9 +751,18 @@ public sealed partial class AssistantService : IDisposable
                 label = p.Label,
                 hint = p.Hint,
                 needsKey = p.NeedsKey,
-                hasKey = p.Id != ClaudeCode && ReadKey(p.Id) is { Length: > 0 },
+                hasKey = !IsAccount(p.Id) && ReadKey(p.Id) is { Length: > 0 },
                 model = _settings.Models.GetValueOrDefault(p.Id, ""),
-                effort = p.Id == ClaudeCode ? _settings.ClaudeEffort : "",
+                effort = p.Id == ClaudeCode ? _settings.ClaudeEffort : p.Id == Codex ? _settings.CodexEffort : "",
+                // Provedor por conta: usa o login de um programa instalado, e a tela mostra o estado dele.
+                account = IsAccount(p.Id),
+                product = p.Id == ClaudeCode ? "Claude Code" : p.Id == Codex ? "Codex" : "",
+                accountName = p.Id == ClaudeCode ? "conta Claude" : p.Id == Codex ? "conta ChatGPT" : "",
+                status = p.Id == ClaudeCode && _claudeStatus is { } claudeStatus
+                    ? new { installed = claudeStatus.Installed, loggedIn = claudeStatus.LoggedIn, account = claudeStatus.Account, plan = claudeStatus.Plan }
+                    : p.Id == Codex && _codexStatus is { } codexStatus
+                        ? new { installed = codexStatus.Installed, loggedIn = codexStatus.LoggedIn, account = codexStatus.Account, plan = (string?)null }
+                        : null,
                 defaultModel = p.Id == Anthropic ? AnthropicChatModel.DefaultModel : "",
                 custom = p.Id == Custom,
             }),
@@ -731,6 +780,15 @@ public sealed partial class AssistantService : IDisposable
             Log.Error("Assistente: estado do Claude Code", ex);
         }
 
+        try
+        {
+            _codexStatus = await Task.Run(() => CodexSession.GetStatusAsync(CancellationToken.None));
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Assistente: estado do Codex", ex);
+        }
+
         PostState();
     }
 
@@ -739,6 +797,25 @@ public sealed partial class AssistantService : IDisposable
         try
         {
             IReadOnlyList<string> items;
+            if (providerId == Codex)
+            {
+                // A lista é a do próprio Codex para esta conta (a mesma do seletor do aplicativo).
+                var models = await Task.Run(() => CodexSession.ListModelsAsync(CancellationToken.None));
+                Send(new
+                {
+                    type = "models",
+                    provider = providerId,
+                    items = models.Select(m => m.Value),
+                    labels = models.ToDictionary(m => m.Value, m => m.Label),
+                    more = Array.Empty<string>(),
+                    // Sem modelo escolhido vale o padrão do Codex, que aceita os níveis do primeiro da lista.
+                    efforts = models.ToDictionary(m => m.Value, m => m.Efforts).Append(new("", models[0].Efforts)).ToDictionary(e => e.Key, e => e.Value),
+                    defaultLabel = (string?)null,
+                    note = (string?)null,
+                });
+                return;
+            }
+
             if (providerId == ClaudeCode)
             {
                 // A lista é a do próprio Claude Code para esta conta, como no seletor do VS Code.
@@ -894,6 +971,7 @@ public sealed partial class AssistantService : IDisposable
 
         private AssistantAgent? _agent;
         private ClaudeCodeSession? _claude;
+        private CodexSession? _codex;
         private CancellationTokenSource? _turn;
         private string? _lastContext;
         private string? _resume;
@@ -950,6 +1028,8 @@ public sealed partial class AssistantService : IDisposable
             Save();
             _claude?.Dispose();
             _claude = null;
+            _codex?.Dispose();
+            _codex = null;
             _host.Dispose();
         }
 
@@ -1068,10 +1148,12 @@ public sealed partial class AssistantService : IDisposable
         public void ResetEngine(bool announce)
         {
             _turn?.Cancel();
-            var had = _agent?.HasHistory == true || _claude?.HasHistory == true;
+            var had = _agent?.HasHistory == true || _claude?.HasHistory == true || _codex?.HasHistory == true;
             _agent = null;
             _claude?.Dispose();
             _claude = null;
+            _codex?.Dispose();
+            _codex = null;
             _lastContext = null;
             _introduced = false;
             if (announce && had)
@@ -1286,6 +1368,13 @@ public sealed partial class AssistantService : IDisposable
                         _owner._workDirectory, _owner._settings.Models.GetValueOrDefault(ClaudeCode), _runner, this, _owner._settings.ClaudeEffort);
                     await Task.Run(() => claude.SendAsync(system, full, images, ct), ct);
                 }
+                else if (_owner.Provider.Id == Codex)
+                {
+                    var codex = _codex ??= new CodexSession(
+                        CodexSession.Find() ?? throw new ChatModelException("O Codex não está instalado nesta máquina. Abra \"Trocar de provedor ou chave...\" no botão do modelo, abaixo do campo de mensagem, para instalar."),
+                        _owner._workDirectory, _owner._settings.Models.GetValueOrDefault(Codex), _runner, this, _owner._settings.CodexEffort);
+                    await Task.Run(() => codex.SendAsync(system + CodexNote, full, images, ct), ct);
+                }
                 else
                 {
                     var agent = _agent ??= new AssistantAgent(_owner.CreateModel(), _runner, this);
@@ -1462,6 +1551,14 @@ public sealed partial class AssistantService : IDisposable
 
             Emit(new { type = "toolEnd", id = call.Id, ok = !result.IsError, output = result.Content.Length > 20_000 ? result.Content[..20_000] + "\n[...]" : result.Content });
         }
+
+        /// <summary>O que o Codex precisa saber além das instruções comuns: de onde vêm as ferramentas e que as dele estão desligadas.</summary>
+        private const string CodexNote =
+            "\n\n# Ambiente (Codex dentro do RootDock)\n" +
+            "Você roda dentro do RootDock, sem acesso a este computador: as ferramentas de shell, de arquivos locais, de navegador e " +
+            "de uso do computador estão desligadas, e apply_patch não se aplica aqui. Todas as ferramentas citadas acima são do " +
+            "servidor MCP \"rootdock\" e agem no servidor remoto da sessão SSH. Use sempre essas, e nunca diga que não tem como " +
+            "executar comandos: run_command do rootdock é o seu terminal.";
 
         /// <summary>Quanto do diário do servidor entra em cada conversa nova.</summary>
         private const int RunbookIntroChars = 6000;

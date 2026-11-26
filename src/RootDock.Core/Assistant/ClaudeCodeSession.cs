@@ -548,7 +548,7 @@ public sealed class ClaudeCodeSession(
         },
     });
 
-    private static ProcessStartInfo StartInfo(string path, string directory, IEnumerable<string> arguments)
+    internal static ProcessStartInfo StartInfo(string path, string directory, IEnumerable<string> arguments)
     {
         var info = new ProcessStartInfo
         {

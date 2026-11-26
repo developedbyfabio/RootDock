@@ -245,6 +245,9 @@ public sealed class AssistantSettings
     /// <summary>Nível de esforço na Conta Claude: "low", "medium", "high", "xhigh" ou "max" (vazio = o padrão do modelo).</summary>
     public string ClaudeEffort { get; set; } = "";
 
+    /// <summary>Nível de esforço na Conta ChatGPT (Codex); vazio = o padrão do modelo.</summary>
+    public string CodexEffort { get; set; } = "";
+
     /// <summary>Endereço do provedor "custom" (compatível com OpenAI: Groq, OpenRouter, Ollama...).</summary>
     public string CustomBaseUrl { get; set; } = "";
 }

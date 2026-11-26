@@ -846,6 +846,7 @@
         'Se estiver em dúvida sobre o que foi pedido ou sobre o ambiente, pergunte antes de agir.'],
       blocks: [] },
   ];
+  const EFFORT_NAMES = { minimal: 'Mínimo', low: 'Baixo', medium: 'Médio', high: 'Alto', xhigh: 'Muito alto', max: 'Máximo', ultra: 'Ultra' };
   let presetScope = 'general';
   let memoryServer = '';
   // Campo sem conteúdo de verdade fica vazio, para o texto de exemplo aparecer.
@@ -958,7 +959,7 @@
     if (loading[p.id] || (!items && requested[p.id])) note('Carregando os modelos...');
     else if (!items) note('Informe a chave em "Trocar de provedor ou chave..." para ver os modelos.');
     else {
-      if (p.id === 'claude-code') item('', info.defaultLabel ? 'Padrão da conta (' + info.defaultLabel + ')' : 'Padrão da conta');
+      if (p.account) item('', info.defaultLabel ? 'Padrão da conta (' + info.defaultLabel + ')' : 'Padrão da conta');
       else if (p.defaultModel) item('', 'Padrão (' + p.defaultModel + ')');
       if (current && !items.includes(current)) item(current, current);
       for (const value of items) if (!more.includes(value)) item(value, labels[value] || value);
@@ -973,9 +974,9 @@
           list.appendChild(b);
         }
       }
-      if (p.id === 'claude-code') {
-        const names = { low: 'Baixo', medium: 'Médio', high: 'Alto', xhigh: 'Muito alto', max: 'Máximo' };
-        const levels = (info.efforts || {})[current] || Object.keys(names);
+      if (p.account) {
+        const names = EFFORT_NAMES;
+        const levels = (info.efforts || {})[current] || ['low', 'medium', 'high', 'xhigh', 'max'];
         if (levels.length) {
           const row = document.createElement('label');
           row.className = 'model-effort';
@@ -1007,7 +1008,7 @@
     providerBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
     if (!open) { modelMoreOpen = false; return; }
     const p = state.providers.find((x) => x.id === state.provider);
-    const canList = p && (p.id === 'claude-code' || p.hasKey || (!p.needsKey && (!p.custom || (state.customBaseUrl || '').trim())));
+    const canList = p && (p.account || p.hasKey || (!p.needsKey && (!p.custom || (state.customBaseUrl || '').trim())));
     if (p && canList && !modelLists[p.id] && !requested[p.id]) { requested[p.id] = true; loading[p.id] = true; send({ type: 'listModels', id: p.id }); }
     renderModelMenu();
     // Alinha o menu com o botão, sem sair do painel.
@@ -1015,6 +1016,15 @@
     modelMenu.style.left = Math.max(0, Math.min(left, $('composer').clientWidth - modelMenu.offsetWidth)) + 'px';
   }
   providerBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleModelMenu(modelMenu.hidden); });
+  // Esc interrompe a resposta com o foco em qualquer ponto do painel (na conversa, num botão), e
+  // não só no campo de mensagem. Com um menu, o histórico ou as configurações abertos, o Esc é deles.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || e.defaultPrevented || !state.busy) return;
+    if (!settings.hidden || !$('history').hidden || !modeMenu.hidden || !modelMenu.hidden) return;
+    e.preventDefault();
+    send({ type: 'stop' });
+  });
+
   modelMenu.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); toggleModelMenu(false); providerBtn.focus(); } });
   document.addEventListener('click', (e) => { if (!modelMenu.hidden && !modelMenu.contains(e.target)) toggleModelMenu(false); });
   window.addEventListener('blur', () => toggleModelMenu(false));
@@ -1071,26 +1081,27 @@
       const body = document.createElement('div');
       body.className = 'provider-body';
 
-      if (p.id === 'claude-code') {
+      if (p.account) {
+        // Provedor por conta: o login é o do programa instalado (Claude Code, Codex); aqui só o estado dele.
         const status = document.createElement('p');
-        const c = state.claude;
+        const c = p.status;
         const actions = document.createElement('div');
         actions.className = 'buttons';
         if (!c) {
           status.className = 'status';
-          status.textContent = 'Verificando o Claude Code...';
+          status.textContent = 'Verificando o ' + p.product + '...';
         } else if (!c.installed) {
           status.className = 'status bad';
-          status.textContent = 'O Claude Code não está instalado nesta máquina.';
-          actions.appendChild(button('Instalar o Claude Code', () => send({ type: 'claudeInstall' }), 'primary'));
+          status.textContent = 'O ' + p.product + ' não está instalado nesta máquina.';
+          actions.appendChild(button('Instalar o ' + p.product, () => send({ type: 'accountInstall', id: p.id }), 'primary'));
         } else if (!c.loggedIn) {
           status.className = 'status warn';
-          status.textContent = 'Claude Code instalado, mas sem login.';
-          actions.appendChild(button('Entrar com a conta Claude', () => send({ type: 'claudeLogin' }), 'primary'));
+          status.textContent = p.product + ' instalado, mas sem login.';
+          actions.appendChild(button('Entrar com a ' + p.accountName, () => send({ type: 'accountLogin', id: p.id }), 'primary'));
         } else {
           status.className = 'status ok';
-          status.textContent = 'Conectado' + (c.account ? ' como ' + c.account : '') + (c.plan ? ' (plano ' + c.plan + ')' : '') + '.';
-          actions.appendChild(button('Trocar de conta', () => send({ type: 'claudeLogin' })));
+          status.textContent = 'Conectado' + (c.account ? (c.account.includes('@') ? ' como ' : ' pela ') + c.account : '') + (c.plan ? ' (plano ' + c.plan + ')' : '') + '.';
+          actions.appendChild(button('Trocar de conta', () => send({ type: 'accountLogin', id: p.id })));
         }
         actions.appendChild(button('Verificar de novo', () => send({ type: 'refreshClaude' })));
         body.append(status, actions);
@@ -1109,7 +1120,7 @@
         body.appendChild(field('Endereço da API', url));
       }
 
-      if (p.id !== 'claude-code') {
+      if (!p.account) {
         if (p.hasKey && !draft.changingKey) {
           // Chave guardada: fica dito com todas as letras (o campo vazio parecia "não salvou").
           const saved = document.createElement('p');
@@ -1147,7 +1158,7 @@
 
       // Modelo: lista pronta para escolher (carregada sozinha com a chave salva).
       const selected = p.id === state.provider;
-      const canList = p.id === 'claude-code' || p.hasKey || (!p.needsKey && (!p.custom || (state.customBaseUrl || '').trim()));
+      const canList = p.account || p.hasKey || (!p.needsKey && (!p.custom || (state.customBaseUrl || '').trim()));
       if (selected && canList && !modelLists[p.id] && !requested[p.id]) {
         requested[p.id] = true;
         loading[p.id] = true;
@@ -1185,7 +1196,7 @@
           const info = modelInfo[p.id] || {};
           const labels = info.labels || {};
           const more = info.more || [];
-          if (p.id === 'claude-code') option('', info.defaultLabel ? 'Padrão da conta (' + info.defaultLabel + ')' : 'Padrão da conta');
+          if (p.account) option('', info.defaultLabel ? 'Padrão da conta (' + info.defaultLabel + ')' : 'Padrão da conta');
           else if (p.defaultModel) option('', 'Padrão (' + p.defaultModel + ')');
           else if (!current) option('', 'Escolha um modelo');
           if (current && !items.includes(current)) option(current, current);
@@ -1208,10 +1219,10 @@
         body.appendChild(field('Modelo', select, canList ? reload : null));
       }
       // Esforço (só na Conta Claude): quanto o modelo pensa antes de responder, como no VS Code.
-      if (p.id === 'claude-code') {
-        const names = { low: 'Baixo', medium: 'Médio', high: 'Alto', xhigh: 'Muito alto', max: 'Máximo' };
+      if (p.account) {
+        const names = EFFORT_NAMES;
         const known = (modelInfo[p.id] || {}).efforts || {};
-        const levels = known[current] || Object.keys(names);
+        const levels = known[current] || ['low', 'medium', 'high', 'xhigh', 'max'];
         const effort = document.createElement('select');
         effort.dataset.key = p.id + ':effort';
         const add = (value, label) => { const o = document.createElement('option'); o.value = value; o.textContent = label; effort.appendChild(o); };
@@ -1356,7 +1367,7 @@
     const current = from && from.providers ? from.providers.find((p) => p.id === from.provider) : null;
     if (!current) { $('provider').textContent = ''; return; }
     let model = current.model || current.defaultModel || '';
-    if (current.id === 'claude-code' && model) {
+    if (current.account && model) {
       const labels = (modelInfo[current.id] || {}).labels || {};
       model = labels[model] || (/^[a-z]+$/.test(model) ? model[0].toUpperCase() + model.slice(1) : model);
     }
@@ -1398,8 +1409,8 @@
       : '<svg viewBox="0 0 16 16"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"/></svg>';
 
     let warning = '';
-    if (current && current.id === 'claude-code' && next.claude && !next.claude.installed) warning = 'O Claude Code não está instalado. Clique aqui para instalar ou escolher outro provedor.';
-    else if (current && current.id === 'claude-code' && next.claude && !next.claude.loggedIn) warning = 'Falta entrar com a conta Claude. Clique aqui para entrar.';
+    if (current && current.account && current.status && !current.status.installed) warning = 'O ' + current.product + ' não está instalado. Clique aqui para instalar ou escolher outro provedor.';
+    else if (current && current.account && current.status && !current.status.loggedIn) warning = 'Falta entrar com a ' + current.accountName + '. Clique aqui para entrar.';
     else if (current && current.needsKey && !current.hasKey) warning = 'Falta a chave de API de ' + current.label + '. Clique aqui para informar.';
     banner.hidden = !warning;
     banner.classList.toggle('action', !!warning);
